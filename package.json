@@ -1,0 +1,26 @@
+{
+  "name": "ezcord",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "postinstall": "nuxt prepare",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.17",
+    "ioredis": "^5.11.1",
+    "nuxt": "^4.2.1",
+    "pg": "^8.22.0",
+    "tailwindcss": "^4.1.17",
+    "vue": "^3.5.25",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.2"
+  }
+}
