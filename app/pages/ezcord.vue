@@ -55,6 +55,7 @@ const telegramChatId = ref("");
 const statusMessage = ref("");
 const errorMessage = ref("");
 const isLoading = ref(false);
+const isBooting = ref(true);
 const isMicOn = ref(false);
 const micLevel = ref(0);
 const voiceReady = ref(false);
@@ -63,6 +64,9 @@ const localPeerId = ref("");
 const peers = ref<Peer[]>([]);
 const connectedPeerIds = ref<string[]>([]);
 const audioSink = ref<HTMLElement | null>(null);
+const accountEmail = ref("");
+const accountPassword = ref("");
+const accountDisplayName = ref("");
 
 let mediaStream: MediaStream | null = null;
 let animationFrame = 0;
@@ -102,6 +106,7 @@ const maxRoomParticipants = 5;
 const participantCount = computed(() => peers.value.length + (user.value ? 1 : 0));
 const connectedCount = computed(() => connectedPeerIds.value.length);
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
+const hasEmail = computed(() => Boolean(user.value?.email));
 
 async function fetchMe() {
   const response = await $fetch<{ user: User | null }>("/api/ezcord/auth/me");
@@ -138,6 +143,50 @@ async function submitAuth() {
     }
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось войти";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+async function authenticateTelegram() {
+  const initData = getTelegramInitData();
+  if (!initData) return false;
+
+  try {
+    const response = await $fetch<{ user: User }>("/api/ezcord/auth/telegram", {
+      method: "POST",
+      body: { initData },
+    });
+    user.value = response.user;
+    statusMessage.value = "Вы вошли через Telegram";
+    return true;
+  } catch (error: any) {
+    errorMessage.value = error?.data?.message || "Не получилось войти через Telegram";
+    return false;
+  }
+}
+
+async function attachEmailAccount() {
+  errorMessage.value = "";
+  statusMessage.value = "";
+  isLoading.value = true;
+
+  try {
+    const response = await $fetch<{ user: User }>("/api/ezcord/auth/email", {
+      method: "POST",
+      body: {
+        email: accountEmail.value,
+        password: accountPassword.value,
+        displayName: accountDisplayName.value,
+      },
+    });
+    user.value = response.user;
+    accountEmail.value = "";
+    accountPassword.value = "";
+    accountDisplayName.value = user.value.displayName;
+    statusMessage.value = "Email привязан";
+  } catch (error: any) {
+    errorMessage.value = error?.data?.message || "Не получилось привязать email";
   } finally {
     isLoading.value = false;
   }
@@ -191,6 +240,9 @@ async function createRoom() {
 
     rooms.value = [response.room, ...rooms.value.filter((room) => room.id !== response.room.id)];
     activeRoom.value = response.room;
+    voiceReady.value = true;
+    startSignaling();
+    await nextTick();
     statusMessage.value = "Комната создана";
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось создать комнату";
@@ -743,12 +795,20 @@ onMounted(async () => {
     roomAccess.value = "telegram_chat";
   }
 
-  await fetchMe();
-  if (user.value) {
-    await fetchRooms();
-  }
-  if (user.value && roomFromQuery.value) {
-    await openRoom(roomFromQuery.value, inviteFromQuery.value);
+  try {
+    await fetchMe();
+    if (!user.value) {
+      await authenticateTelegram();
+    }
+    if (user.value) {
+      accountDisplayName.value = user.value.displayName;
+      await fetchRooms();
+    }
+    if (user.value && roomFromQuery.value) {
+      await openRoom(roomFromQuery.value, inviteFromQuery.value);
+    }
+  } finally {
+    isBooting.value = false;
   }
 });
 
@@ -818,7 +878,19 @@ useHead({
     <div
       class="min-h-[calc(100vh-96px)] bg-[radial-gradient(circle_at_64%_10%,rgba(66,209,29,0.12),transparent_34%),linear-gradient(180deg,#f7faf5_0%,#eef5ec_100%)]"
     >
-      <div v-if="!user" class="mx-auto grid max-w-[1500px] gap-7 px-4 py-7 sm:px-6 lg:grid-cols-[470px_1fr] lg:px-8 lg:py-10 xl:gap-10">
+      <div v-if="isBooting" class="mx-auto flex min-h-[calc(100vh-96px)] max-w-[1560px] items-center justify-center px-4">
+        <div class="flex items-center gap-5 rounded-[28px] border border-black/10 bg-white px-7 py-6 shadow-[0_28px_70px_rgba(16,17,15,0.12)]">
+          <img class="h-16 w-16 rounded-[18px] object-cover" src="/ezcord-logo.png" alt="Ezcord" />
+          <div>
+            <p class="text-3xl font-black uppercase leading-none">
+              <span class="text-[#42d11d]">EZ</span><span class="text-[#10110f]">CORD</span>
+            </p>
+            <p class="mt-2 text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">загрузка</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="!user" class="mx-auto grid max-w-[1500px] gap-7 px-4 py-7 sm:px-6 lg:grid-cols-[470px_1fr] lg:px-8 lg:py-10 xl:gap-10">
         <section class="self-start rounded-[28px] border border-black/10 bg-white p-6 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-8">
           <div class="mb-8 grid grid-cols-2 rounded-[24px] bg-[#f0f1ee] p-2">
             <button
@@ -1038,17 +1110,55 @@ useHead({
           <section class="rounded-[24px] border border-[#2fa8f4]/20 bg-[#eff8ff] p-6">
             <div class="flex items-center justify-between gap-4">
               <div class="min-w-0">
-                <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2fa8f4]">Telegram</p>
-                <p class="mt-2 truncate text-lg font-black">{{ telegramName || "Не привязан" }}</p>
+                <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2fa8f4]">Аккаунт</p>
+                <p class="mt-2 truncate text-lg font-black">{{ hasEmail ? user.email : "Вход через Telegram" }}</p>
+                <p class="mt-1 truncate text-sm font-extrabold text-[#858d82]">{{ telegramName || "Telegram не привязан" }}</p>
               </div>
               <button
+                v-if="!user.telegram"
                 class="h-12 rounded-[16px] bg-[#2fa8f4] px-5 text-sm font-black text-white transition hover:bg-[#10110f]"
                 type="button"
                 @click="linkTelegram"
               >
-                Привязать
+                Telegram
               </button>
             </div>
+          </section>
+
+          <section v-if="!hasEmail" class="rounded-[24px] border border-[#42d11d]/25 bg-white p-6 shadow-[0_18px_45px_rgba(16,17,15,0.06)]">
+            <p class="text-sm font-black uppercase tracking-[0.12em] text-[#42d11d]">Email для входа</p>
+            <p class="mt-2 text-base font-extrabold leading-snug text-[#858d82]">Привяжите почту, чтобы входить без Telegram.</p>
+
+            <form class="mt-5 space-y-4" @submit.prevent="attachEmailAccount">
+              <input
+                v-model="accountDisplayName"
+                class="h-[58px] w-full rounded-[16px] border border-black/10 bg-[#f5f6f3] px-5 text-base font-bold outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
+                autocomplete="name"
+                placeholder="Имя"
+                type="text"
+              />
+              <input
+                v-model="accountEmail"
+                class="h-[58px] w-full rounded-[16px] border border-black/10 bg-[#f5f6f3] px-5 text-base font-bold outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
+                autocomplete="email"
+                placeholder="you@mail.com"
+                type="email"
+              />
+              <input
+                v-model="accountPassword"
+                class="h-[58px] w-full rounded-[16px] border border-black/10 bg-[#f5f6f3] px-5 text-base font-bold outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
+                autocomplete="new-password"
+                placeholder="Пароль от 8 символов"
+                type="password"
+              />
+              <button
+                class="flex h-[58px] w-full items-center justify-center rounded-[16px] bg-[#42d11d] px-5 text-base font-black text-[#10110f] shadow-[0_16px_34px_rgba(66,209,29,0.22)] transition hover:bg-[#10110f] hover:text-white disabled:opacity-60"
+                :disabled="isLoading"
+                type="submit"
+              >
+                Привязать email
+              </button>
+            </form>
           </section>
 
           <p v-if="errorMessage" class="rounded-[20px] border border-[#f4b4b4] bg-[#fff1f1] px-6 py-5 text-lg font-black text-[#a01818]">

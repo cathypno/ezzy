@@ -6,6 +6,7 @@ import { createError, deleteCookie, getCookie, getHeader, getQuery, getRouterPar
 const DATA_FILE = "ezcord.json";
 export const EZCORD_SESSION_COOKIE = "ezcord_session";
 const SIGNAL_TTL_SECONDS = 60;
+const TELEGRAM_EMAIL_DOMAIN = "telegram.ezcord.local";
 
 export const EZCORD_MAX_ROOM_PARTICIPANTS = 5;
 
@@ -129,7 +130,7 @@ export function writeEzcordData(data: EzcordData): void {
 export function publicEzcordUser(user: EzcordUser): EzcordPublicUser {
   return {
     id: user.id,
-    email: user.email,
+    email: isSyntheticTelegramEmail(user.email) ? "" : user.email,
     displayName: user.displayName,
     telegram: user.telegram,
   };
@@ -222,6 +223,10 @@ export async function createEzcordUser(email: string, password: string, displayN
     throw createError({ statusCode: 400, message: "Проверьте email" });
   }
 
+  if (isSyntheticTelegramEmail(normalizedEmail)) {
+    throw createError({ statusCode: 400, message: "Укажите обычный email" });
+  }
+
   if (password.length < 8) {
     throw createError({ statusCode: 400, message: "Пароль должен быть не короче 8 символов" });
   }
@@ -271,16 +276,125 @@ export async function findEzcordUserByCredentials(email: string, password: strin
   return user;
 }
 
+export async function getOrCreateEzcordTelegramUser(initData: string): Promise<EzcordUser> {
+  const webAppUser = verifyTelegramInitData(initData);
+  const identity = telegramIdentityFromWebAppUser(webAppUser);
+  const displayName = telegramDisplayName(identity);
+  const existingUser = await findEzcordUserByTelegramId(identity.id);
+
+  if (existingUser) {
+    return await updateEzcordUserTelegram(existingUser.id, identity, displayName);
+  }
+
+  const user: EzcordUser = {
+    id: randomId("user"),
+    email: syntheticTelegramEmail(identity.id),
+    passwordHash: hashPassword(randomId("telegram")),
+    displayName,
+    createdAt: new Date().toISOString(),
+    telegram: identity,
+  };
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    await pool.query(
+      `insert into ezcord_users
+        (id, email, password_hash, display_name, created_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       on conflict (telegram_id) do nothing`,
+      [
+        user.id,
+        user.email,
+        user.passwordHash,
+        user.displayName,
+        user.createdAt,
+        identity.id,
+        identity.username,
+        identity.firstName,
+        identity.lastName,
+        identity.photoUrl,
+        identity.linkedAt,
+      ],
+    );
+
+    const createdUser = await findEzcordUserByTelegramId(identity.id);
+    if (!createdUser) {
+      throw createError({ statusCode: 500, message: "Не получилось создать Telegram-аккаунт" });
+    }
+    return createdUser;
+  }
+
+  const data = readEzcordData();
+  const concurrentUser = data.users.find((item) => item.telegram?.id === identity.id);
+  if (concurrentUser) return concurrentUser;
+
+  data.users.push(user);
+  writeEzcordData(data);
+  return user;
+}
+
+export async function attachEzcordEmailToUser(userId: string, email: string, password: string, displayName = ""): Promise<EzcordUser> {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!isValidEmail(normalizedEmail)) {
+    throw createError({ statusCode: 400, message: "Проверьте email" });
+  }
+
+  if (isSyntheticTelegramEmail(normalizedEmail)) {
+    throw createError({ statusCode: 400, message: "Укажите обычный email" });
+  }
+
+  if (password.length < 8) {
+    throw createError({ statusCode: 400, message: "Пароль должен быть не короче 8 символов" });
+  }
+
+  const passwordHash = hashPassword(password);
+  const nextDisplayName = displayName.trim();
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const owner = await pool.query("select id from ezcord_users where email = $1 and id <> $2", [normalizedEmail, userId]);
+    if (owner.rowCount > 0) {
+      throw createError({ statusCode: 409, message: "Такой email уже зарегистрирован" });
+    }
+
+    const result = await pool.query(
+      `update ezcord_users
+          set email = $1,
+              password_hash = $2,
+              display_name = case when $3::text <> '' then $3 else display_name end
+        where id = $4
+        returning *`,
+      [normalizedEmail, passwordHash, nextDisplayName, userId],
+    );
+
+    if (result.rowCount === 0) {
+      throw createError({ statusCode: 404, message: "Пользователь не найден" });
+    }
+    return rowToUser(result.rows[0]);
+  }
+
+  const data = readEzcordData();
+  const owner = data.users.find((user) => user.email === normalizedEmail && user.id !== userId);
+  if (owner) {
+    throw createError({ statusCode: 409, message: "Такой email уже зарегистрирован" });
+  }
+
+  const user = data.users.find((item) => item.id === userId);
+  if (!user) {
+    throw createError({ statusCode: 404, message: "Пользователь не найден" });
+  }
+
+  user.email = normalizedEmail;
+  user.passwordHash = passwordHash;
+  if (nextDisplayName) user.displayName = nextDisplayName;
+  writeEzcordData(data);
+  return user;
+}
+
 export async function linkTelegramToEzcordUser(userId: string, initData: string): Promise<EzcordTelegramIdentity> {
   const webAppUser = verifyTelegramInitData(initData);
-  const identity: EzcordTelegramIdentity = {
-    id: webAppUser.id,
-    username: webAppUser.username,
-    firstName: webAppUser.first_name,
-    lastName: webAppUser.last_name,
-    photoUrl: webAppUser.photo_url,
-    linkedAt: new Date().toISOString(),
-  };
+  const identity = telegramIdentityFromWebAppUser(webAppUser);
 
   if (usePostgresStore()) {
     const pool = await getPgPool();
@@ -896,6 +1010,66 @@ function findJsonUserByEmail(email: string): EzcordUser | null {
   return data.users.find((item) => item.email === email) || null;
 }
 
+async function findEzcordUserByTelegramId(telegramId: number): Promise<EzcordUser | null> {
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const result = await pool.query("select * from ezcord_users where telegram_id = $1", [telegramId]);
+    return result.rows[0] ? rowToUser(result.rows[0]) : null;
+  }
+
+  const data = readEzcordData();
+  return data.users.find((item) => item.telegram?.id === telegramId) || null;
+}
+
+async function updateEzcordUserTelegram(userId: string, identity: EzcordTelegramIdentity, displayName: string): Promise<EzcordUser> {
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const result = await pool.query(
+      `update ezcord_users
+          set telegram_id = $1,
+              telegram_username = $2,
+              telegram_first_name = $3,
+              telegram_last_name = $4,
+              telegram_photo_url = $5,
+              telegram_linked_at = $6,
+              display_name = case
+                when email like $7 then $8
+                else display_name
+              end
+        where id = $9
+        returning *`,
+      [
+        identity.id,
+        identity.username,
+        identity.firstName,
+        identity.lastName,
+        identity.photoUrl,
+        identity.linkedAt,
+        `%@${TELEGRAM_EMAIL_DOMAIN}`,
+        displayName,
+        userId,
+      ],
+    );
+    if (result.rowCount === 0) {
+      throw createError({ statusCode: 404, message: "Пользователь не найден" });
+    }
+    return rowToUser(result.rows[0]);
+  }
+
+  const data = readEzcordData();
+  const user = data.users.find((item) => item.id === userId);
+  if (!user) {
+    throw createError({ statusCode: 404, message: "Пользователь не найден" });
+  }
+
+  user.telegram = identity;
+  if (isSyntheticTelegramEmail(user.email)) {
+    user.displayName = displayName;
+  }
+  writeEzcordData(data);
+  return user;
+}
+
 async function isUserKickedFromRoom(roomId: string, userId: string): Promise<boolean> {
   if (usePostgresStore()) {
     const pool = await getPgPool();
@@ -977,6 +1151,33 @@ function normalizeEmail(email: string): string {
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isSyntheticTelegramEmail(email: string): boolean {
+  return normalizeEmail(email).endsWith(`@${TELEGRAM_EMAIL_DOMAIN}`);
+}
+
+function syntheticTelegramEmail(telegramId: number): string {
+  return `telegram-${telegramId}-${randomBytes(6).toString("hex")}@${TELEGRAM_EMAIL_DOMAIN}`;
+}
+
+function telegramIdentityFromWebAppUser(webAppUser: TelegramWebAppUser): EzcordTelegramIdentity {
+  return {
+    id: webAppUser.id,
+    username: webAppUser.username,
+    firstName: webAppUser.first_name,
+    lastName: webAppUser.last_name,
+    photoUrl: webAppUser.photo_url,
+    linkedAt: new Date().toISOString(),
+  };
+}
+
+function telegramDisplayName(identity: EzcordTelegramIdentity): string {
+  return (
+    [identity.firstName, identity.lastName].filter(Boolean).join(" ").trim() ||
+    (identity.username ? `@${identity.username}` : "") ||
+    `Telegram ${identity.id}`
+  );
 }
 
 function getEzcordBotToken(): string {
