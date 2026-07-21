@@ -897,6 +897,14 @@ button {
   color: var(--ez-widget-muted);
 }
 
+.ez-circle-btn--copied {
+  border-style: solid;
+  border-color: var(--ez-green);
+  background: var(--ez-green);
+  color: #082900;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--ez-green) 38%, transparent);
+}
+
 .ez-voice-control {
   margin-top: 28px;
   display: grid;

@@ -293,12 +293,54 @@ async function exitRoom() {
 }
 
 async function copyInvite(room: Room) {
-  if (!room.inviteUrl) return;
-  await navigator.clipboard?.writeText(room.inviteUrl);
+  if (!room.inviteUrl) {
+    errorMessage.value = "Invite ссылка недоступна";
+    return;
+  }
+
+  errorMessage.value = "";
+
+  const copied = await writeClipboardText(room.inviteUrl);
+  if (!copied) {
+    errorMessage.value = "Не получилось скопировать ссылку";
+    return;
+  }
+
   copiedRoomId.value = room.id;
+  statusMessage.value = "Invite ссылка скопирована";
   window.setTimeout(() => {
     if (copiedRoomId.value === room.id) copiedRoomId.value = "";
   }, 1600);
+}
+
+async function writeClipboardText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Telegram WebView can deny Clipboard API even on a user click.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.left = "-9999px";
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
 }
 
 async function toggleMic() {
@@ -1129,7 +1171,17 @@ useHead({
                 <p class="ez-peer-label">{{ peer.displayName }}</p>
               </div>
 
-              <button v-if="activeRoom.inviteUrl" class="ez-circle-btn" type="button" @click="copyInvite(activeRoom)">+</button>
+              <button
+                v-if="activeRoom.inviteUrl"
+                class="ez-circle-btn"
+                :class="{ 'ez-circle-btn--copied': copiedRoomId === activeRoom.id }"
+                type="button"
+                :aria-label="copiedRoomId === activeRoom.id ? 'Invite ссылка скопирована' : 'Скопировать invite ссылку'"
+                :title="copiedRoomId === activeRoom.id ? 'Скопировано' : 'Скопировать invite'"
+                @click="copyInvite(activeRoom)"
+              >
+                {{ copiedRoomId === activeRoom.id ? "✓" : "+" }}
+              </button>
             </div>
 
             <div class="ez-voice-control">
