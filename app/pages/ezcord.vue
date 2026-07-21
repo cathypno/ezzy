@@ -839,7 +839,7 @@ useHead({
             <span class="block text-[28px] font-black uppercase leading-none tracking-normal sm:text-[34px]">
               <span class="text-[#42d11d]">EZ</span><span class="text-[#10110f]">CORD</span>
             </span>
-            <span class="mt-2 block truncate text-sm font-extrabold text-[#858d82] sm:text-base">Voice rooms for Telegram</span>
+            <span class="mt-2 block truncate text-sm font-extrabold text-[#858d82] sm:text-base">Голосовые комнаты для Telegram</span>
           </span>
         </button>
 
@@ -1171,8 +1171,8 @@ useHead({
 
         <section class="min-h-[700px] rounded-[28px] border border-black/10 bg-white p-7 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-9">
           <p class="text-sm font-black uppercase tracking-[0.14em] text-[#858d82]">Комнаты</p>
-          <h1 class="mt-5 text-6xl font-black uppercase leading-none tracking-normal sm:text-7xl lg:text-8xl">
-            <span class="text-[#42d11d]">Voice</span> lobby
+          <h1 class="mt-5 text-5xl font-black uppercase leading-none tracking-normal sm:text-6xl lg:text-7xl">
+            <span class="text-[#42d11d]">Лобби</span>
           </h1>
 
           <div class="mt-10 grid gap-6">
@@ -1187,8 +1187,8 @@ useHead({
                     <span class="rounded-[12px] bg-[#e7fddd] px-4 py-2 text-sm font-black text-[#42d11d]">{{ accessGlyphs[room.access] }}</span>
                     <span class="text-lg font-black text-white/60">{{ accessLabels[room.access] }}</span>
                   </div>
-                  <h2 class="mt-10 break-words text-5xl font-black leading-none sm:text-6xl">{{ room.name }}</h2>
-                  <p class="mt-5 text-xl font-extrabold text-white/50">WebRTC voice room</p>
+                  <h2 class="mt-8 break-words text-4xl font-black leading-none sm:text-5xl">{{ room.name }}</h2>
+                  <p class="mt-4 text-xl font-extrabold text-white/50">Голосовая комната</p>
                 </div>
 
                 <div class="flex items-center gap-3 text-xl font-black text-white/60">
@@ -1235,15 +1235,15 @@ useHead({
         </section>
       </div>
 
-      <div v-else class="mx-auto max-w-[1560px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
-        <section class="rounded-[28px] border border-black/10 bg-white p-7 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-9">
-          <p class="text-sm font-black uppercase tracking-[0.14em] text-[#858d82]">Комнаты</p>
-          <h1 class="mt-5 text-6xl font-black uppercase leading-none tracking-normal sm:text-7xl lg:text-8xl">
-            <span class="text-[#42d11d]">Voice</span> lobby
+      <div v-else class="mx-auto max-w-[1320px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <section class="rounded-[24px] border border-black/10 bg-white p-5 shadow-[0_22px_55px_rgba(16,17,15,0.1)] sm:p-6 lg:p-7">
+          <p class="text-sm font-black uppercase tracking-[0.14em] text-[#858d82]">Комната</p>
+          <h1 class="mt-4 break-words text-4xl font-black leading-none tracking-normal sm:text-5xl lg:text-6xl xl:text-[64px]">
+            {{ activeRoom.name }}
           </h1>
 
-          <div class="mt-10 grid gap-7 xl:grid-cols-[1fr_320px]">
-            <div class="rounded-[28px] bg-[#111210] p-7 text-white shadow-[0_30px_70px_rgba(16,17,15,0.22)] sm:p-9">
+          <div class="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+            <div class="rounded-[24px] bg-[#111210] p-5 text-white shadow-[0_24px_55px_rgba(16,17,15,0.2)] sm:p-6 lg:p-7">
               <div class="flex items-start justify-between gap-5">
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-4">
@@ -1252,7 +1252,7 @@ useHead({
                     </span>
                     <span class="text-lg font-black text-white/60">{{ accessLabels[activeRoom.access] }}</span>
                   </div>
-                  <div class="mt-8 inline-flex items-center gap-2 rounded-full bg-[#e7fddd] px-5 py-3 text-base font-black text-[#42d11d]">
+                  <div class="mt-6 inline-flex items-center gap-2 rounded-full bg-[#e7fddd] px-4 py-2 text-sm font-black text-[#42d11d]">
                     <span class="h-3 w-3 rounded-full bg-[#42d11d]"></span>
                     Комната активна
                   </div>
@@ -1260,19 +1260,17 @@ useHead({
                 <span class="text-3xl font-black text-white/50">•••</span>
               </div>
 
-              <h2 class="mt-9 break-words text-[64px] font-black leading-none sm:text-[82px] lg:text-[94px]">{{ activeRoom.name }}</h2>
-
-              <div class="mt-8 flex flex-wrap items-start gap-5">
+              <div class="mt-7 flex flex-wrap items-start gap-4">
                 <div>
                   <div
-                    class="flex h-20 w-20 items-center justify-center rounded-full border-[5px] border-[#42d11d] bg-[#55dc2b] text-2xl font-black text-[#10110f] shadow-[0_0_24px_rgba(85,220,43,0.34)]"
+                    class="flex h-16 w-16 items-center justify-center rounded-full border-[4px] border-[#42d11d] bg-[#55dc2b] text-xl font-black text-[#10110f] shadow-[0_0_22px_rgba(85,220,43,0.32)] sm:h-[72px] sm:w-[72px] sm:text-2xl"
                   >
                     {{ userInitial }}
                   </div>
                   <p class="mt-3 text-center text-sm font-black text-white/60">вы</p>
                 </div>
                 <div v-for="peer in peers" :key="peer.peerId" class="group">
-                  <div class="relative flex h-20 w-20 items-center justify-center rounded-full border-[5px] border-[#42d11d] bg-white/10 text-2xl font-black">
+                  <div class="relative flex h-16 w-16 items-center justify-center rounded-full border-[4px] border-[#42d11d] bg-white/10 text-xl font-black sm:h-[72px] sm:w-[72px] sm:text-2xl">
                     {{ getInitials(peer.displayName) }}
                     <button
                       v-if="activeRoom.createdBy === user.id"
@@ -1287,7 +1285,7 @@ useHead({
                 </div>
                 <button
                   v-if="activeRoom.inviteUrl"
-                  class="flex h-20 w-20 items-center justify-center rounded-full border-[3px] border-dashed border-white/30 text-3xl font-black text-white/60 transition hover:border-[#42d11d] hover:text-[#42d11d]"
+                  class="flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-dashed border-white/30 text-3xl font-black text-white/60 transition hover:border-[#42d11d] hover:text-[#42d11d] sm:h-[72px] sm:w-[72px]"
                   type="button"
                   @click="copyInvite(activeRoom)"
                 >
@@ -1295,13 +1293,13 @@ useHead({
                 </button>
               </div>
 
-              <div class="mt-12 grid gap-5 lg:grid-cols-[1fr_150px] lg:items-end">
+              <div class="mt-8 grid gap-5 lg:grid-cols-[1fr_112px] lg:items-end">
                 <div>
                   <div class="flex items-center justify-between text-base font-black uppercase tracking-[0.1em]">
                     <span class="text-white/50">Голос</span>
                     <span :class="isMicOn ? 'text-[#42d11d]' : 'text-white/50'">{{ isMicOn ? "Live" : "Muted" }}</span>
                   </div>
-                  <div class="mt-4 flex h-[100px] items-end justify-center gap-3 rounded-[20px] bg-white/6 px-6 py-6">
+                  <div class="mt-4 flex h-[82px] items-end justify-center gap-2.5 rounded-[18px] bg-white/6 px-5 py-5">
                     <span
                       v-for="height in waveBars"
                       :key="height"
@@ -1312,7 +1310,7 @@ useHead({
                   </div>
                 </div>
                 <button
-                  class="mx-auto flex h-[126px] w-[126px] items-center justify-center rounded-full border text-5xl transition"
+                  class="mx-auto flex h-[104px] w-[104px] items-center justify-center rounded-full border text-4xl transition"
                   :class="
                     isMicOn
                       ? 'border-[#55dc2b] bg-[#55dc2b] text-[#10110f] shadow-[0_0_44px_rgba(85,220,43,0.54)]'
@@ -1329,13 +1327,13 @@ useHead({
             </div>
 
             <aside class="grid content-start gap-5">
-              <div class="rounded-[24px] border border-[#42d11d]/25 bg-[#e8fbdf] p-7">
+              <div class="rounded-[20px] border border-[#42d11d]/25 bg-[#e8fbdf] p-5">
                 <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2c9d23]">Участники</p>
-                <p class="mt-6 text-6xl font-black">{{ participantCount }}/{{ maxRoomParticipants }}</p>
+                <p class="mt-4 text-5xl font-black">{{ participantCount }}/{{ maxRoomParticipants }}</p>
               </div>
-              <div class="rounded-[24px] border border-[#2fa8f4]/25 bg-[#e8f5ff] p-7">
+              <div class="rounded-[20px] border border-[#2fa8f4]/25 bg-[#e8f5ff] p-5">
                 <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2fa8f4]">Соединения</p>
-                <p class="mt-6 text-6xl font-black">{{ connectedCount }}</p>
+                <p class="mt-4 text-5xl font-black">{{ connectedCount }}</p>
               </div>
               <button
                 class="h-16 rounded-[18px] border border-black/10 bg-white px-6 text-lg font-black shadow-sm transition hover:bg-[#10110f] hover:text-white"
