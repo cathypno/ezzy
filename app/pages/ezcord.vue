@@ -101,6 +101,7 @@ const waveBars = [18, 30, 46, 26, 58, 74, 34, 50, 24, 62, 40, 22];
 const maxRoomParticipants = 5;
 const participantCount = computed(() => peers.value.length + (user.value ? 1 : 0));
 const connectedCount = computed(() => connectedPeerIds.value.length);
+const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
 
 async function fetchMe() {
   const response = await $fetch<{ user: User | null }>("/api/ezcord/auth/me");
@@ -709,6 +710,20 @@ function randomClientId() {
   return `peer_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
+function getInitials(value: string) {
+  const parts = value
+    .replace(/@.*/, "")
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  return (parts[0]?.slice(0, 2) || "EZ").toUpperCase();
+}
+
 function getTelegramInitData() {
   return typeof window !== "undefined" ? (window as any).Telegram?.WebApp?.initData || "" : "";
 }
@@ -751,57 +766,72 @@ useHead({
 </script>
 
 <template>
-  <main
-    class="min-h-screen bg-[#f4f7f1] text-[#151914]"
-    style="
-      background:
-        linear-gradient(135deg, rgba(61, 195, 32, 0.12) 0%, transparent 34%),
-        linear-gradient(315deg, rgba(39, 167, 231, 0.13) 0%, transparent 32%),
-        #f4f7f1;
-    "
-  >
-    <section class="border-b border-black/10 bg-white/90 backdrop-blur">
-      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4">
-        <div class="flex items-center gap-3">
-          <img class="h-12 w-12 rounded-lg object-cover shadow-[0_8px_22px_rgba(23,25,21,0.18)]" src="/ezcord-logo.png" alt="Ezcord" />
-          <div>
-            <p class="text-2xl font-black uppercase leading-none tracking-normal">
-              <span class="text-[#43c51b]">EZ</span><span class="text-[#171915]">CORD</span>
-            </p>
-            <p class="mt-1 text-xs font-bold text-black/50">Voice rooms for Telegram</p>
-          </div>
-        </div>
-
-        <div v-if="user" class="flex flex-wrap items-center gap-2">
-          <span class="rounded-lg border border-black/10 bg-white px-3 py-2 text-sm font-black shadow-sm">
-            {{ user.displayName }}
+  <main class="min-h-screen overflow-hidden bg-[#f4f7f1] text-[#10110f]">
+    <header class="border-b border-black/10 bg-white/90 backdrop-blur">
+      <div class="mx-auto flex min-h-[96px] max-w-[1560px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <button class="flex min-w-0 items-center gap-4 text-left" type="button" @click="activeRoom ? exitRoom() : undefined">
+          <img
+            class="h-[58px] w-[58px] shrink-0 rounded-[18px] object-cover shadow-[0_8px_18px_rgba(16,17,15,0.18)] sm:h-[68px] sm:w-[68px]"
+            src="/ezcord-logo.png"
+            alt="Ezcord"
+          />
+          <span class="min-w-0">
+            <span class="block text-[28px] font-black uppercase leading-none tracking-normal sm:text-[34px]">
+              <span class="text-[#42d11d]">EZ</span><span class="text-[#10110f]">CORD</span>
+            </span>
+            <span class="mt-2 block truncate text-sm font-extrabold text-[#858d82] sm:text-base">Voice rooms for Telegram</span>
           </span>
+        </button>
+
+        <div class="flex shrink-0 items-center gap-2 sm:gap-4">
           <button
-            class="inline-flex h-10 items-center rounded-lg border border-black/10 bg-[#171915] px-4 text-sm font-black text-white shadow-sm transition hover:bg-[#27a7e7]"
+            class="flex h-[54px] w-[54px] items-center justify-center rounded-[18px] border border-black/10 bg-white text-2xl shadow-sm transition hover:border-[#42d11d]/50 hover:bg-[#f0fee9] sm:h-[64px] sm:w-[64px]"
             type="button"
+            aria-label="Theme"
+          >
+            🌙
+          </button>
+          <button
+            v-if="user && activeRoom"
+            class="hidden h-[64px] items-center rounded-[18px] border border-black/10 bg-white px-7 text-lg font-black shadow-sm transition hover:bg-[#10110f] hover:text-white sm:inline-flex"
+            type="button"
+            @click="exitRoom"
+          >
+            Лобби
+          </button>
+          <button
+            v-if="user"
+            class="flex h-[64px] min-w-0 items-center gap-4 rounded-[18px] border border-black/10 bg-white px-3 pl-5 text-left shadow-sm transition hover:border-[#42d11d]/50"
+            type="button"
+            title="Выйти"
             @click="logout"
           >
-            Выйти
+            <span class="hidden max-w-[160px] truncate text-lg font-black sm:block">{{ user.displayName }}</span>
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-[15px] bg-[#42d11d] text-xl font-black text-[#10110f]">
+              {{ userInitial }}
+            </span>
           </button>
         </div>
       </div>
-    </section>
+    </header>
 
-    <div class="mx-auto grid max-w-6xl gap-5 px-5 py-5 lg:grid-cols-[360px_1fr]">
-      <aside class="space-y-5">
-        <section v-if="!user" class="rounded-lg border border-black/10 bg-white p-5 shadow-[0_20px_55px_rgba(23,25,21,0.08)]">
-          <div class="mb-5 grid grid-cols-2 rounded-lg border border-black/10 bg-[#eef4eb] p-1">
+    <div
+      class="min-h-[calc(100vh-96px)] bg-[radial-gradient(circle_at_64%_10%,rgba(66,209,29,0.12),transparent_34%),linear-gradient(180deg,#f7faf5_0%,#eef5ec_100%)]"
+    >
+      <div v-if="!user" class="mx-auto grid max-w-[1500px] gap-7 px-4 py-7 sm:px-6 lg:grid-cols-[470px_1fr] lg:px-8 lg:py-10 xl:gap-10">
+        <section class="self-start rounded-[28px] border border-black/10 bg-white p-6 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-8">
+          <div class="mb-8 grid grid-cols-2 rounded-[24px] bg-[#f0f1ee] p-2">
             <button
-              class="h-10 rounded-md text-sm font-black transition"
-              :class="authMode === 'register' ? 'bg-white text-[#171915] shadow-sm' : 'text-black/45'"
+              class="h-16 rounded-[18px] text-lg font-black transition sm:h-[76px] sm:text-xl"
+              :class="authMode === 'register' ? 'bg-white text-[#10110f] shadow-[0_14px_30px_rgba(16,17,15,0.09)]' : 'text-[#858d82]'"
               type="button"
               @click="authMode = 'register'"
             >
               Регистрация
             </button>
             <button
-              class="h-10 rounded-md text-sm font-black transition"
-              :class="authMode === 'login' ? 'bg-white text-[#171915] shadow-sm' : 'text-black/45'"
+              class="h-16 rounded-[18px] text-lg font-black transition sm:h-[76px] sm:text-xl"
+              :class="authMode === 'login' ? 'bg-white text-[#10110f] shadow-[0_14px_30px_rgba(16,17,15,0.09)]' : 'text-[#858d82]'"
               type="button"
               @click="authMode = 'login'"
             >
@@ -809,338 +839,411 @@ useHead({
             </button>
           </div>
 
-          <form class="space-y-3" @submit.prevent="submitAuth">
+          <form class="space-y-6" @submit.prevent="submitAuth">
             <label v-if="authMode === 'register'" class="block">
-              <span class="text-xs font-black uppercase text-black/45">Имя</span>
+              <span class="text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">Имя</span>
               <input
                 v-model="displayName"
-                class="mt-2 h-12 w-full rounded-lg border border-black/10 bg-[#f8faf6] px-3 text-sm font-bold outline-none transition focus:border-[#43c51b] focus:bg-white focus:ring-4 focus:ring-[#43c51b]/15"
+                class="mt-3 h-[68px] w-full rounded-[18px] border border-black/10 bg-[#f5f6f3] px-6 text-lg font-bold outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
                 autocomplete="name"
+                placeholder="Ваше имя"
                 type="text"
               />
             </label>
 
             <label class="block">
-              <span class="text-xs font-black uppercase text-black/45">Email</span>
+              <span class="text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">Email</span>
               <input
                 v-model="email"
-                class="mt-2 h-12 w-full rounded-lg border border-black/10 bg-[#f8faf6] px-3 text-sm font-bold outline-none transition focus:border-[#43c51b] focus:bg-white focus:ring-4 focus:ring-[#43c51b]/15"
+                class="mt-3 h-[68px] w-full rounded-[18px] border border-black/10 bg-[#f5f6f3] px-6 text-lg font-bold outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
                 autocomplete="email"
+                placeholder="you@mail.com"
                 type="email"
               />
             </label>
 
             <label class="block">
-              <span class="text-xs font-black uppercase text-black/45">Пароль</span>
+              <span class="text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">Пароль</span>
               <input
                 v-model="password"
-                class="mt-2 h-12 w-full rounded-lg border border-black/10 bg-[#f8faf6] px-3 text-sm font-bold outline-none transition focus:border-[#43c51b] focus:bg-white focus:ring-4 focus:ring-[#43c51b]/15"
+                class="mt-3 h-[68px] w-full rounded-[18px] border border-black/10 bg-[#f5f6f3] px-6 text-lg font-bold outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
                 autocomplete="current-password"
+                placeholder="••••••••"
                 type="password"
               />
             </label>
 
             <button
-              class="inline-flex h-12 w-full items-center justify-center rounded-lg bg-[#171915] px-4 text-sm font-black text-white shadow-[0_16px_35px_rgba(23,25,21,0.18)] transition hover:bg-[#43c51b] disabled:opacity-60"
+              class="mt-3 flex h-[72px] w-full items-center justify-center rounded-[18px] bg-[#10110f] px-6 text-xl font-black text-white shadow-[0_18px_36px_rgba(16,17,15,0.22)] transition hover:bg-[#42d11d] hover:text-[#10110f] disabled:opacity-60"
               :disabled="isLoading"
               type="submit"
             >
               {{ authMode === "register" ? "Создать аккаунт" : "Войти" }}
             </button>
           </form>
+
+          <p class="mt-7 text-center text-base font-extrabold text-[#858d82]">
+            или через <span class="text-[#2fa8f4]">Telegram</span>
+          </p>
+
+          <p v-if="errorMessage" class="mt-6 rounded-[18px] border border-[#f4b4b4] bg-[#fff1f1] px-5 py-4 text-sm font-bold text-[#a01818]">
+            {{ errorMessage }}
+          </p>
+          <p v-if="statusMessage" class="mt-6 rounded-[18px] border border-[#b7e8c8] bg-[#effbf3] px-5 py-4 text-sm font-bold text-[#17683d]">
+            {{ statusMessage }}
+          </p>
         </section>
 
-        <section v-else class="rounded-lg border border-black/10 bg-white p-5 shadow-[0_20px_55px_rgba(23,25,21,0.08)]">
-          <p class="text-xs font-black uppercase text-black/45">Аккаунт</p>
-          <h2 class="mt-1 break-words text-lg font-black">{{ user.email }}</h2>
-
-          <div class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-[#27a7e7]/25 bg-[#eff8ff] p-3">
-            <div>
-              <p class="text-xs font-black uppercase text-black/45">Telegram</p>
-              <p class="mt-1 text-sm font-black">{{ telegramName || "Не привязан" }}</p>
-            </div>
-            <button
-              class="h-10 rounded-lg bg-[#27a7e7] px-3 text-xs font-black text-white shadow-[0_10px_24px_rgba(39,167,231,0.22)] transition hover:bg-[#171915]"
-              type="button"
-              @click="linkTelegram"
-            >
-              Привязать
-            </button>
-          </div>
-        </section>
-
-        <section v-if="user" class="rounded-lg border border-black/10 bg-white p-5 shadow-[0_20px_55px_rgba(23,25,21,0.08)]">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <p class="text-xs font-black uppercase text-black/45">Создание</p>
-              <h2 class="mt-1 text-xl font-black">Новая комната</h2>
-            </div>
-            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#43c51b] text-xl font-black text-white">+</span>
+        <section class="min-w-0 py-4 lg:py-2">
+          <div
+            class="inline-flex items-center gap-3 rounded-full border border-[#42d11d]/30 bg-[#ebfde4] px-6 py-3 text-sm font-black uppercase tracking-[0.08em] text-[#2c9d23]"
+          >
+            <span class="h-3 w-3 rounded-full bg-[#8fe37c]"></span>
+            Telegram Mini App
           </div>
 
-          <form class="mt-4 space-y-3" @submit.prevent="createRoom">
-            <label class="block">
-              <span class="text-xs font-black uppercase text-black/45">Название</span>
-              <input
-                v-model="roomName"
-                class="mt-2 h-12 w-full rounded-lg border border-black/10 bg-[#f8faf6] px-3 text-sm font-bold outline-none transition focus:border-[#43c51b] focus:bg-white focus:ring-4 focus:ring-[#43c51b]/15"
-                type="text"
-              />
-            </label>
+          <h1 class="mt-9 text-[76px] font-black uppercase leading-[0.86] tracking-normal sm:text-[112px] lg:text-[136px] xl:text-[150px]">
+            <span class="text-[#42d11d]">EZ</span><span class="text-[#10110f]">CORD</span>
+          </h1>
+          <p class="mt-8 max-w-[760px] text-3xl font-extrabold leading-tight text-[#858d82] lg:text-[34px]">
+            Голосовые комнаты, приватные ссылки, доступ по Telegram-чату и email-аккаунт в одном приложении.
+          </p>
 
-            <label class="block">
-              <span class="text-xs font-black uppercase text-black/45">Доступ</span>
-              <select
-                v-model="roomAccess"
-                class="mt-2 h-12 w-full rounded-lg border border-black/10 bg-[#f8faf6] px-3 text-sm font-bold outline-none transition focus:border-[#43c51b] focus:bg-white focus:ring-4 focus:ring-[#43c51b]/15"
-              >
-                <option value="public">Открытая</option>
-                <option value="private">Приватная</option>
-                <option value="telegram_chat">Только Telegram-чат</option>
-              </select>
-            </label>
-
-            <label v-if="roomAccess === 'telegram_chat'" class="block">
-              <span class="text-xs font-black uppercase text-black/45">Telegram chat id</span>
-              <input
-                v-model="telegramChatId"
-                class="mt-2 h-12 w-full rounded-lg border border-black/10 bg-[#f8faf6] px-3 text-sm font-bold outline-none transition focus:border-[#43c51b] focus:bg-white focus:ring-4 focus:ring-[#43c51b]/15"
-                placeholder="-100..."
-                type="text"
-              />
-            </label>
-
-            <button
-              class="inline-flex h-12 w-full items-center justify-center rounded-lg bg-[#43c51b] px-4 text-sm font-black text-white shadow-[0_16px_35px_rgba(67,197,27,0.22)] transition hover:bg-[#171915] disabled:opacity-60"
-              :disabled="isLoading"
-              type="submit"
-            >
-              Создать
-            </button>
-          </form>
-        </section>
-
-        <p v-if="errorMessage" class="rounded-lg border border-[#f4b4b4] bg-[#fff1f1] px-4 py-3 text-sm font-bold text-[#a01818]">
-          {{ errorMessage }}
-        </p>
-        <p v-if="statusMessage" class="rounded-lg border border-[#b7e8c8] bg-[#effbf3] px-4 py-3 text-sm font-bold text-[#17683d]">
-          {{ statusMessage }}
-        </p>
-      </aside>
-
-      <section class="min-h-[640px] overflow-hidden rounded-lg border border-black/10 bg-white p-5 shadow-[0_26px_80px_rgba(23,25,21,0.10)]">
-        <div v-if="!user" class="grid min-h-[560px] gap-6 lg:grid-cols-[1fr_320px]">
-          <div class="flex flex-col justify-center">
-            <div class="inline-flex w-fit items-center gap-2 rounded-lg border border-[#43c51b]/30 bg-[#effbe9] px-3 py-2 text-xs font-black uppercase text-[#229a21]">
-              <span class="h-2 w-2 rounded-full bg-[#43c51b]"></span>
-              Telegram Mini App
+          <div class="mt-10 grid gap-5 xl:grid-cols-[1fr_390px]">
+            <div class="grid gap-5 sm:grid-cols-2">
+              <article class="rounded-[24px] border border-black/10 bg-white p-7 shadow-[0_22px_50px_rgba(16,17,15,0.06)]">
+                <div class="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#e7fddd] text-3xl text-[#31a826]">♬</div>
+                <h2 class="mt-7 text-2xl font-black">Голосовые комнаты</h2>
+                <p class="mt-3 text-xl font-bold leading-snug text-[#858d82]">WebRTC audio внутри Telegram</p>
+              </article>
+              <article class="rounded-[24px] border border-black/10 bg-white p-7 shadow-[0_22px_50px_rgba(16,17,15,0.06)]">
+                <div class="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#e8f5ff] text-3xl text-[#2fa8f4]">✉</div>
+                <h2 class="mt-7 text-2xl font-black">Email + Telegram</h2>
+                <p class="mt-3 text-xl font-bold leading-snug text-[#858d82]">Один аккаунт, две точки входа</p>
+              </article>
+              <article class="rounded-[24px] border border-black/10 bg-white p-7 shadow-[0_22px_50px_rgba(16,17,15,0.06)]">
+                <div class="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#e8f5ff] text-3xl text-[#2fa8f4]">↗</div>
+                <h2 class="mt-7 text-2xl font-black">Приватные ссылки</h2>
+                <p class="mt-3 text-xl font-bold leading-snug text-[#858d82]">Invite-доступ к комнатам</p>
+              </article>
+              <article class="rounded-[24px] border border-black/10 bg-white p-7 shadow-[0_22px_50px_rgba(16,17,15,0.06)]">
+                <div class="flex h-16 w-16 items-center justify-center rounded-[18px] bg-[#e7fddd] text-3xl text-[#31a826]">▢</div>
+                <h2 class="mt-7 text-2xl font-black">Telegram-чат</h2>
+                <p class="mt-3 text-xl font-bold leading-snug text-[#858d82]">Проверка членства в группе</p>
+              </article>
             </div>
-            <h1 class="mt-5 text-5xl font-black uppercase leading-none tracking-normal sm:text-7xl">
-              <span class="text-[#43c51b]">EZ</span><span class="text-[#171915]">CORD</span>
-            </h1>
-            <p class="mt-4 max-w-xl text-lg font-bold leading-relaxed text-black/58">
-              Голосовые комнаты, приватные ссылки, доступ по Telegram-чату и email-аккаунт в одном приложении.
-            </p>
 
-            <div class="mt-7 grid gap-3 sm:grid-cols-2">
-              <div class="rounded-lg border border-[#43c51b]/25 bg-white px-4 py-3 shadow-sm">
-                <p class="text-sm font-black">Голосовые комнаты</p>
-                <p class="mt-1 text-xs font-bold text-black/45">WebRTC audio внутри Telegram</p>
-              </div>
-              <div class="rounded-lg border border-[#27a7e7]/25 bg-white px-4 py-3 shadow-sm">
-                <p class="text-sm font-black">Email + Telegram</p>
-                <p class="mt-1 text-xs font-bold text-black/45">Один аккаунт, две точки входа</p>
-              </div>
-              <div class="rounded-lg border border-[#27a7e7]/25 bg-white px-4 py-3 shadow-sm">
-                <p class="text-sm font-black">Приватные ссылки</p>
-                <p class="mt-1 text-xs font-bold text-black/45">Invite-доступ к комнатам</p>
-              </div>
-              <div class="rounded-lg border border-[#43c51b]/25 bg-white px-4 py-3 shadow-sm">
-                <p class="text-sm font-black">Telegram-чат</p>
-                <p class="mt-1 text-xs font-bold text-black/45">Проверка членства в группе</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex items-center justify-center">
-            <div class="w-full max-w-[320px] rounded-lg border border-black/10 bg-[#171915] p-5 text-white shadow-[0_28px_70px_rgba(23,25,21,0.28)]">
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3">
-                  <img class="h-10 w-10 rounded-lg object-cover" src="/ezcord-logo.png" alt="Ezcord" />
-                  <div>
-                    <p class="text-sm font-black">Ezcord</p>
-                    <p class="text-xs font-bold text-white/45">мини-приложение</p>
+            <aside class="rounded-[28px] bg-[#111210] p-7 text-white shadow-[0_28px_65px_rgba(16,17,15,0.28)]">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex min-w-0 items-center gap-4">
+                  <img class="h-14 w-14 rounded-[16px] object-cover" src="/ezcord-logo.png" alt="Ezcord" />
+                  <div class="min-w-0">
+                    <p class="truncate text-xl font-black">Ezcord</p>
+                    <p class="mt-1 truncate text-sm font-bold text-white/50">мини-приложение</p>
                   </div>
                 </div>
-                <span class="text-xl font-black text-white/45">...</span>
+                <span class="text-3xl font-black text-white/50">•••</span>
               </div>
 
-              <div class="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#43c51b]/12 px-3 py-2 text-xs font-black text-[#7dff4a]">
-                <span class="h-2 w-2 rounded-full bg-[#43c51b]"></span>
+              <div class="mt-8 inline-flex items-center gap-2 rounded-full bg-[#e7fddd] px-4 py-2 text-sm font-black text-[#42d11d]">
+                <span class="h-2.5 w-2.5 rounded-full bg-[#42d11d]"></span>
                 Комната активна
               </div>
-              <h2 class="mt-4 text-3xl font-black">Вечерний подкаст</h2>
-              <p class="mt-1 text-sm font-bold text-white/45">01:24:36</p>
+              <h2 class="mt-6 text-4xl font-black leading-none">Вечерний подкаст</h2>
+              <p class="mt-4 text-2xl font-black text-[#42d11d]">01:24:36</p>
 
-              <div class="mt-6 grid grid-cols-4 gap-3">
-                <div class="flex aspect-square items-center justify-center rounded-full border-2 border-[#43c51b] bg-white/10 text-sm font-black">DK</div>
-                <div class="flex aspect-square items-center justify-center rounded-full border-2 border-[#43c51b] bg-white/10 text-sm font-black">AK</div>
-                <div class="flex aspect-square items-center justify-center rounded-full border-2 border-[#43c51b] bg-white/10 text-sm font-black">TG</div>
-                <div class="flex aspect-square items-center justify-center rounded-full border border-white/18 bg-white/8 text-sm font-black">+</div>
+              <div class="mt-7 flex gap-4">
+                <div class="flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-[#42d11d] text-lg font-black">DK</div>
+                <div class="flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-[#42d11d] text-lg font-black">AK</div>
+                <div class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-white/30 text-2xl font-black text-white/60">+</div>
               </div>
 
-              <div class="mt-8 flex items-end justify-center gap-1.5">
-                <span
-                  v-for="height in waveBars"
-                  :key="height"
-                  class="w-2 rounded-full bg-[#7dff4a]"
-                  :style="{ height: `${height}px` }"
-                ></span>
-              </div>
-              <div class="mx-auto mt-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#43c51b] text-3xl font-black shadow-[0_0_32px_rgba(67,197,27,0.58)]">
-                MIC
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <section v-else>
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p class="text-xs font-black uppercase text-black/45">Комнаты</p>
-              <h1 class="mt-1 text-4xl font-black uppercase leading-none tracking-normal">
-                <span class="text-[#43c51b]">Voice</span> lobby
-              </h1>
-            </div>
-            <button
-              v-if="activeRoom"
-              class="inline-flex h-10 items-center rounded-lg border border-black/10 bg-[#f4f7f1] px-4 text-sm font-black transition hover:bg-[#171915] hover:text-white"
-              type="button"
-              @click="exitRoom"
-            >
-              Лобби
-            </button>
-          </div>
-
-          <div v-if="activeRoom" class="mt-5 grid gap-5 lg:grid-cols-[1fr_240px]">
-            <div class="rounded-lg bg-[#171915] p-5 text-white shadow-[0_26px_70px_rgba(23,25,21,0.24)]">
-              <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div class="inline-flex items-center gap-2 rounded-lg bg-white/8 px-3 py-2 text-xs font-black text-white/78">
-                    <span class="text-[#7dff4a]">{{ accessGlyphs[activeRoom.access] }}</span>
-                    {{ accessLabels[activeRoom.access] }}
+              <div class="mt-9 flex items-end gap-5">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between text-sm font-black uppercase tracking-[0.08em]">
+                    <span class="text-white/50">Голос</span>
+                    <span class="text-[#42d11d]">Live</span>
                   </div>
-                  <h2 class="mt-4 text-4xl font-black leading-tight">{{ activeRoom.name }}</h2>
-                  <p class="mt-2 text-sm font-bold text-white/45">
-                    {{ voiceReady ? "WebRTC voice room active" : "Connecting voice room" }}
-                  </p>
+                  <div class="mt-4 flex h-24 items-end justify-center gap-2 rounded-[20px] bg-white/10 px-5 py-5">
+                    <span
+                      v-for="height in waveBars"
+                      :key="height"
+                      class="w-2 rounded-full bg-[#72ee41]"
+                      :style="{ height: `${Math.max(14, Math.round(height * 0.65))}px` }"
+                    ></span>
+                  </div>
                 </div>
+                <div class="flex h-[104px] w-[104px] shrink-0 items-center justify-center rounded-full bg-[#55dc2b] text-2xl font-black text-[#10110f] shadow-[0_0_42px_rgba(85,220,43,0.62)]">
+                  MIC
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </div>
 
-                <button
-                  class="h-12 rounded-lg px-5 text-sm font-black text-white shadow-lg transition"
-                  :class="isMicOn ? 'bg-[#cf3d3d] hover:bg-[#a92828]' : 'bg-[#43c51b] hover:bg-[#27a7e7]'"
-                  type="button"
-                  @click="toggleMic"
+      <div v-else-if="!activeRoom" class="mx-auto grid max-w-[1560px] gap-7 px-4 py-7 sm:px-6 lg:grid-cols-[470px_1fr] lg:px-8 lg:py-10">
+        <aside class="space-y-7">
+          <section class="rounded-[28px] border border-black/10 bg-white p-7 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-9">
+            <div class="flex items-start justify-between gap-5">
+              <div>
+                <p class="text-sm font-black uppercase tracking-[0.14em] text-[#858d82]">Создание</p>
+                <h1 class="mt-9 text-4xl font-black leading-tight sm:text-5xl">Новая комната</h1>
+              </div>
+              <span class="flex h-[70px] w-[70px] shrink-0 items-center justify-center rounded-[18px] bg-[#42d11d] text-4xl font-black text-white">+</span>
+            </div>
+
+            <form class="mt-8 space-y-7" @submit.prevent="createRoom">
+              <label class="block">
+                <span class="text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">Название</span>
+                <input
+                  v-model="roomName"
+                  class="mt-3 h-[72px] w-full rounded-[18px] border border-black/10 bg-[#f5f6f3] px-6 text-xl font-black outline-none transition focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
+                  type="text"
+                />
+              </label>
+
+              <label class="block">
+                <span class="text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">Доступ</span>
+                <select
+                  v-model="roomAccess"
+                  class="mt-3 h-[72px] w-full rounded-[18px] border border-black/10 bg-[#f5f6f3] px-6 text-xl font-black outline-none transition focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
                 >
-                  {{ isMicOn ? "Mute" : "Mic on" }}
-                </button>
-              </div>
+                  <option value="public">Открытая</option>
+                  <option value="private">Приватная</option>
+                  <option value="telegram_chat">Только Telegram-чат</option>
+                </select>
+              </label>
 
-              <div class="mt-9 flex h-24 items-end justify-center gap-2 rounded-lg bg-white/6 px-4 py-5">
-                <span
-                  v-for="height in waveBars"
-                  :key="height"
-                  class="w-2 rounded-full transition-all"
-                  :class="isMicOn ? 'bg-[#7dff4a]' : 'bg-white/22'"
-                  :style="{ height: `${Math.max(16, Math.round((height * (micLevel + 28)) / 100))}px` }"
-                ></span>
-              </div>
-              <div class="mt-3 flex items-center justify-between text-xs font-black uppercase text-white/45">
-                <span>Input</span>
-                <span>{{ micLevel }}%</span>
-              </div>
+              <label v-if="roomAccess === 'telegram_chat'" class="block">
+                <span class="text-sm font-black uppercase tracking-[0.12em] text-[#858d82]">Telegram chat id</span>
+                <input
+                  v-model="telegramChatId"
+                  class="mt-3 h-[72px] w-full rounded-[18px] border border-black/10 bg-[#f5f6f3] px-6 text-xl font-black outline-none transition placeholder:text-[#858d82] focus:border-[#42d11d] focus:bg-white focus:ring-4 focus:ring-[#42d11d]/15"
+                  placeholder="-100..."
+                  type="text"
+                />
+              </label>
 
-              <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                <div class="rounded-lg border border-white/10 bg-white/8 p-3">
-                  <p class="text-xs font-black uppercase text-white/45">You</p>
-                  <p class="mt-1 text-sm font-black">{{ user.displayName }}</p>
-                </div>
-                <div v-for="peer in peers" :key="peer.peerId" class="rounded-lg border border-white/10 bg-white/8 p-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div>
-                      <p class="text-xs font-black uppercase text-white/45">
-                        {{ connectedPeerIds.includes(peer.peerId) ? "Connected" : "Connecting" }}
-                      </p>
-                      <p class="mt-1 text-sm font-black">{{ peer.displayName }}</p>
-                    </div>
-                    <button
-                      v-if="activeRoom.createdBy === user.id"
-                      class="h-8 rounded-lg bg-white/10 px-2 text-xs font-black text-white/70 transition hover:bg-[#cf3d3d] hover:text-white"
-                      type="button"
-                      @click="kickPeer(peer.peerId)"
-                    >
-                      Кик
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <button
+                class="flex h-[76px] w-full items-center justify-center rounded-[18px] bg-[#42d11d] px-6 text-xl font-black text-white shadow-[0_20px_44px_rgba(66,209,29,0.24)] transition hover:bg-[#10110f] disabled:opacity-60"
+                :disabled="isLoading"
+                type="submit"
+              >
+                Создать
+              </button>
+            </form>
+          </section>
 
-              <div ref="audioSink" class="hidden"></div>
+          <section class="rounded-[24px] border border-[#2fa8f4]/20 bg-[#eff8ff] p-6">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2fa8f4]">Telegram</p>
+                <p class="mt-2 truncate text-lg font-black">{{ telegramName || "Не привязан" }}</p>
+              </div>
+              <button
+                class="h-12 rounded-[16px] bg-[#2fa8f4] px-5 text-sm font-black text-white transition hover:bg-[#10110f]"
+                type="button"
+                @click="linkTelegram"
+              >
+                Привязать
+              </button>
             </div>
+          </section>
 
-            <div class="grid content-start gap-3">
-              <div class="rounded-lg border border-[#43c51b]/25 bg-[#effbe9] p-4">
-                <p class="text-xs font-black uppercase text-black/45">Участники</p>
-                <p class="mt-2 text-4xl font-black">{{ participantCount }}/{{ maxRoomParticipants }}</p>
-              </div>
-              <div class="rounded-lg border border-[#27a7e7]/25 bg-[#eff8ff] p-4">
-                <p class="text-xs font-black uppercase text-black/45">Соединения</p>
-                <p class="mt-2 text-4xl font-black">{{ connectedCount }}</p>
-              </div>
-            </div>
-          </div>
+          <p v-if="errorMessage" class="rounded-[20px] border border-[#f4b4b4] bg-[#fff1f1] px-6 py-5 text-lg font-black text-[#a01818]">
+            {{ errorMessage }}
+          </p>
+          <p v-if="statusMessage" class="rounded-[20px] border border-[#b7e8c8] bg-[#e8fbdf] px-6 py-5 text-lg font-black text-[#2c9d23]">
+            {{ statusMessage }}
+          </p>
+        </aside>
 
-          <div v-else class="mt-5 grid gap-3">
+        <section class="min-h-[700px] rounded-[28px] border border-black/10 bg-white p-7 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-9">
+          <p class="text-sm font-black uppercase tracking-[0.14em] text-[#858d82]">Комнаты</p>
+          <h1 class="mt-5 text-6xl font-black uppercase leading-none tracking-normal sm:text-7xl lg:text-8xl">
+            <span class="text-[#42d11d]">Voice</span> lobby
+          </h1>
+
+          <div class="mt-10 grid gap-6">
             <article
               v-for="room in rooms"
               :key="room.id"
-              class="rounded-lg border border-black/10 bg-[#f8faf6] p-4 shadow-sm transition hover:border-[#43c51b] hover:bg-white"
+              class="rounded-[28px] bg-[#111210] p-7 text-white shadow-[0_28px_60px_rgba(16,17,15,0.18)]"
             >
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div class="inline-flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs font-black shadow-sm">
-                    <span class="text-[#43c51b]">{{ accessGlyphs[room.access] }}</span>
-                    {{ accessLabels[room.access] }}
+              <div class="flex flex-wrap items-start justify-between gap-5">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-4">
+                    <span class="rounded-[12px] bg-[#e7fddd] px-4 py-2 text-sm font-black text-[#42d11d]">{{ accessGlyphs[room.access] }}</span>
+                    <span class="text-lg font-black text-white/60">{{ accessLabels[room.access] }}</span>
                   </div>
-                  <h2 class="mt-3 text-xl font-black">{{ room.name }}</h2>
+                  <h2 class="mt-10 break-words text-5xl font-black leading-none sm:text-6xl">{{ room.name }}</h2>
+                  <p class="mt-5 text-xl font-extrabold text-white/50">WebRTC voice room</p>
                 </div>
 
-                <div class="flex flex-wrap gap-2">
+                <div class="flex items-center gap-3 text-xl font-black text-white/60">
+                  <span class="h-3 w-3 rounded-full bg-[#42d11d]"></span>
+                  до {{ maxRoomParticipants }}
+                </div>
+              </div>
+
+              <div class="mt-9 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap gap-3">
                   <button
                     v-if="room.inviteUrl"
-                    class="h-10 rounded-lg border border-[#27a7e7]/30 bg-white px-3 text-sm font-black text-[#147ab0] transition hover:bg-[#eff8ff]"
+                    class="h-[58px] rounded-[18px] border border-white/20 bg-white/5 px-8 text-lg font-black text-white transition hover:bg-white hover:text-[#10110f]"
                     type="button"
                     @click="copyInvite(room)"
                   >
                     {{ copiedRoomId === room.id ? "Скопировано" : "Invite" }}
                   </button>
+                </div>
+                <div class="flex items-center gap-8">
+                  <div class="hidden h-14 items-end gap-2 sm:flex">
+                    <span
+                      v-for="height in waveBars.slice(0, 7)"
+                      :key="height"
+                      class="w-2 rounded-full bg-[#42d11d]"
+                      :style="{ height: `${Math.max(12, Math.round(height * 0.45))}px` }"
+                    ></span>
+                  </div>
                   <button
-                    class="h-10 rounded-lg bg-[#171915] px-4 text-sm font-black text-white transition hover:bg-[#43c51b]"
+                    class="h-[62px] rounded-[18px] bg-[#55dc2b] px-9 text-xl font-black text-[#10110f] shadow-[0_18px_44px_rgba(85,220,43,0.36)] transition hover:bg-white"
                     type="button"
                     @click="openRoom(room.id)"
                   >
-                    Войти
+                    Войти →
                   </button>
                 </div>
               </div>
             </article>
 
-            <div v-if="rooms.length === 0" class="rounded-lg border border-dashed border-black/20 bg-[#f8faf6] p-8 text-center">
-              <p class="text-lg font-black">Комнат пока нет</p>
+            <div v-if="rooms.length === 0" class="rounded-[28px] border border-dashed border-black/20 bg-[#f8faf6] p-12 text-center">
+              <p class="text-3xl font-black">Комнат пока нет</p>
             </div>
           </div>
         </section>
-      </section>
+      </div>
+
+      <div v-else class="mx-auto max-w-[1560px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+        <section class="rounded-[28px] border border-black/10 bg-white p-7 shadow-[0_28px_70px_rgba(16,17,15,0.12)] sm:p-9">
+          <p class="text-sm font-black uppercase tracking-[0.14em] text-[#858d82]">Комнаты</p>
+          <h1 class="mt-5 text-6xl font-black uppercase leading-none tracking-normal sm:text-7xl lg:text-8xl">
+            <span class="text-[#42d11d]">Voice</span> lobby
+          </h1>
+
+          <div class="mt-10 grid gap-7 xl:grid-cols-[1fr_320px]">
+            <div class="rounded-[28px] bg-[#111210] p-7 text-white shadow-[0_30px_70px_rgba(16,17,15,0.22)] sm:p-9">
+              <div class="flex items-start justify-between gap-5">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-4">
+                    <span class="rounded-[12px] bg-[#e7fddd] px-4 py-2 text-sm font-black text-[#42d11d]">
+                      {{ accessGlyphs[activeRoom.access] }}
+                    </span>
+                    <span class="text-lg font-black text-white/60">{{ accessLabels[activeRoom.access] }}</span>
+                  </div>
+                  <div class="mt-8 inline-flex items-center gap-2 rounded-full bg-[#e7fddd] px-5 py-3 text-base font-black text-[#42d11d]">
+                    <span class="h-3 w-3 rounded-full bg-[#42d11d]"></span>
+                    Комната активна
+                  </div>
+                </div>
+                <span class="text-3xl font-black text-white/50">•••</span>
+              </div>
+
+              <h2 class="mt-9 break-words text-[64px] font-black leading-none sm:text-[82px] lg:text-[94px]">{{ activeRoom.name }}</h2>
+
+              <div class="mt-8 flex flex-wrap items-start gap-5">
+                <div>
+                  <div
+                    class="flex h-20 w-20 items-center justify-center rounded-full border-[5px] border-[#42d11d] bg-[#55dc2b] text-2xl font-black text-[#10110f] shadow-[0_0_24px_rgba(85,220,43,0.34)]"
+                  >
+                    {{ userInitial }}
+                  </div>
+                  <p class="mt-3 text-center text-sm font-black text-white/60">вы</p>
+                </div>
+                <div v-for="peer in peers" :key="peer.peerId" class="group">
+                  <div class="relative flex h-20 w-20 items-center justify-center rounded-full border-[5px] border-[#42d11d] bg-white/10 text-2xl font-black">
+                    {{ getInitials(peer.displayName) }}
+                    <button
+                      v-if="activeRoom.createdBy === user.id"
+                      class="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-[#cf3d3d] text-xs font-black opacity-100 transition hover:bg-white hover:text-[#cf3d3d] sm:opacity-0 sm:group-hover:opacity-100"
+                      type="button"
+                      @click="kickPeer(peer.peerId)"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p class="mt-3 max-w-24 truncate text-center text-sm font-black text-white/60">{{ peer.displayName }}</p>
+                </div>
+                <button
+                  v-if="activeRoom.inviteUrl"
+                  class="flex h-20 w-20 items-center justify-center rounded-full border-[3px] border-dashed border-white/30 text-3xl font-black text-white/60 transition hover:border-[#42d11d] hover:text-[#42d11d]"
+                  type="button"
+                  @click="copyInvite(activeRoom)"
+                >
+                  +
+                </button>
+              </div>
+
+              <div class="mt-12 grid gap-5 lg:grid-cols-[1fr_150px] lg:items-end">
+                <div>
+                  <div class="flex items-center justify-between text-base font-black uppercase tracking-[0.1em]">
+                    <span class="text-white/50">Голос</span>
+                    <span :class="isMicOn ? 'text-[#42d11d]' : 'text-white/50'">{{ isMicOn ? "Live" : "Muted" }}</span>
+                  </div>
+                  <div class="mt-4 flex h-[100px] items-end justify-center gap-3 rounded-[20px] bg-white/6 px-6 py-6">
+                    <span
+                      v-for="height in waveBars"
+                      :key="height"
+                      class="w-2.5 rounded-full transition-all"
+                      :class="isMicOn ? 'bg-[#72ee41]' : 'bg-white/25'"
+                      :style="{ height: `${Math.max(16, Math.round((height * (micLevel + 28)) / 100))}px` }"
+                    ></span>
+                  </div>
+                </div>
+                <button
+                  class="mx-auto flex h-[126px] w-[126px] items-center justify-center rounded-full border text-5xl transition"
+                  :class="
+                    isMicOn
+                      ? 'border-[#55dc2b] bg-[#55dc2b] text-[#10110f] shadow-[0_0_44px_rgba(85,220,43,0.54)]'
+                      : 'border-white/40 bg-white/10 text-white/60 hover:border-[#55dc2b] hover:text-[#55dc2b]'
+                  "
+                  type="button"
+                  @click="toggleMic"
+                >
+                  🎙
+                </button>
+              </div>
+
+              <div ref="audioSink" class="hidden"></div>
+            </div>
+
+            <aside class="grid content-start gap-5">
+              <div class="rounded-[24px] border border-[#42d11d]/25 bg-[#e8fbdf] p-7">
+                <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2c9d23]">Участники</p>
+                <p class="mt-6 text-6xl font-black">{{ participantCount }}/{{ maxRoomParticipants }}</p>
+              </div>
+              <div class="rounded-[24px] border border-[#2fa8f4]/25 bg-[#e8f5ff] p-7">
+                <p class="text-sm font-black uppercase tracking-[0.12em] text-[#2fa8f4]">Соединения</p>
+                <p class="mt-6 text-6xl font-black">{{ connectedCount }}</p>
+              </div>
+              <button
+                class="h-16 rounded-[18px] border border-black/10 bg-white px-6 text-lg font-black shadow-sm transition hover:bg-[#10110f] hover:text-white"
+                type="button"
+                @click="exitRoom"
+              >
+                Выйти в лобби
+              </button>
+              <p v-if="errorMessage" class="rounded-[20px] border border-[#f4b4b4] bg-[#fff1f1] px-6 py-5 text-base font-black text-[#a01818]">
+                {{ errorMessage }}
+              </p>
+              <p v-if="statusMessage" class="rounded-[20px] border border-[#b7e8c8] bg-[#e8fbdf] px-6 py-5 text-base font-black text-[#2c9d23]">
+                {{ statusMessage }}
+              </p>
+            </aside>
+          </div>
+        </section>
+      </div>
     </div>
   </main>
 </template>
