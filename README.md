@@ -38,6 +38,18 @@ Required services:
 
 The Postgres schema is created automatically on first startup. Existing `data/ezcord.json` state is migrated once when Postgres is enabled.
 
+## CI/CD
+
+GitHub Actions deploys Ezcord files into the current production Nuxt app at `/var/www/rs-platform` and restarts PM2 process `rocketseven-site`.
+
+Add these repository secrets in GitHub:
+
+- `EZCORD_DEPLOY_HOST`: server host, for example `155.212.135.121`
+- `EZCORD_DEPLOY_USER`: SSH user, for example `root`
+- `EZCORD_DEPLOY_SSH_KEY`: private SSH key with access to the server
+
+The production `.env` stays on the server and is not copied from GitHub.
+
 Health check:
 
 ```bash

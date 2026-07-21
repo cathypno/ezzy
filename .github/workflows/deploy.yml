@@ -1,0 +1,95 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ezcord-production
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  REMOTE_APP_DIR: /var/www/rs-platform
+  REMOTE_PM2_APP: rocketseven-site
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.EZCORD_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.EZCORD_DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.EZCORD_DEPLOY_SSH_KEY }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/ezcord_deploy
+          chmod 600 ~/.ssh/ezcord_deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload Ezcord files
+        env:
+          DEPLOY_HOST: ${{ secrets.EZCORD_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.EZCORD_DEPLOY_USER }}
+        run: |
+          tar -cf /tmp/ezcord-deploy.tar \
+            app/pages/ezcord.vue \
+            public/ezcord-logo.png \
+            server/api/ezcord \
+            server/utils/ezcord.ts \
+            server/utils/ezcordRealtime.ts \
+            nuxt.config.ts
+
+          scp -i ~/.ssh/ezcord_deploy /tmp/ezcord-deploy.tar "$DEPLOY_USER@$DEPLOY_HOST:/tmp/ezcord-deploy.tar"
+
+      - name: Build and restart on server
+        env:
+          DEPLOY_HOST: ${{ secrets.EZCORD_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.EZCORD_DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/ezcord_deploy "$DEPLOY_USER@$DEPLOY_HOST" "
+            set -e
+            cd $REMOTE_APP_DIR
+            tar -xf /tmp/ezcord-deploy.tar
+            rm -f /tmp/ezcord-deploy.tar
+            find app server public -name '._*' -type f -delete
+            bash -lc 'source /root/.nvm/nvm.sh && npm install && npm run build && pm2 restart $REMOTE_PM2_APP --update-env'
+          "
+
+      - name: Health check
+        env:
+          DEPLOY_HOST: ${{ secrets.EZCORD_DEPLOY_HOST }}
+        run: |
+          curl --fail --max-time 15 "https://rocketseven.ru/api/ezcord/health"
