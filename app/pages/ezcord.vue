@@ -67,6 +67,7 @@ const audioSink = ref<HTMLElement | null>(null);
 const accountEmail = ref("");
 const accountPassword = ref("");
 const accountDisplayName = ref("");
+const theme = ref<"light" | "dark">("light");
 
 let mediaStream: MediaStream | null = null;
 let animationFrame = 0;
@@ -110,6 +111,7 @@ const hasEmail = computed(() => Boolean(user.value?.email));
 const publicRoomCount = computed(() => rooms.value.filter((room) => room.access === "public").length);
 const privateRoomCount = computed(() => rooms.value.filter((room) => room.access === "private").length);
 const telegramRoomCount = computed(() => rooms.value.filter((room) => room.access === "telegram_chat").length);
+const themeLabel = computed(() => (theme.value === "light" ? "Включить темную тему" : "Включить светлую тему"));
 
 async function fetchMe() {
   const response = await $fetch<{ user: User | null }>("/api/ezcord/auth/me");
@@ -226,6 +228,13 @@ async function linkTelegram() {
   }
 }
 
+function toggleTheme() {
+  theme.value = theme.value === "light" ? "dark" : "light";
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("ezcord-theme", theme.value);
+  }
+}
+
 async function createRoom() {
   errorMessage.value = "";
   statusMessage.value = "";
@@ -246,6 +255,7 @@ async function createRoom() {
     voiceReady.value = true;
     startSignaling();
     await nextTick();
+    scrollToAppTop();
     statusMessage.value = "Комната создана";
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось создать комнату";
@@ -268,6 +278,7 @@ async function openRoom(roomId: string, invite = "") {
     voiceReady.value = response.voice.ready;
     startSignaling();
     await nextTick();
+    scrollToAppTop();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Нет доступа к комнате";
   }
@@ -277,6 +288,8 @@ async function exitRoom() {
   await leaveActiveRoom();
   activeRoom.value = null;
   cleanupVoice();
+  await nextTick();
+  scrollToAppTop();
 }
 
 async function copyInvite(room: Room) {
@@ -790,8 +803,19 @@ function prepareTelegramApp() {
   app.expand?.();
 }
 
+function scrollToAppTop() {
+  if (typeof window === "undefined") return;
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  });
+}
+
 onMounted(async () => {
   prepareTelegramApp();
+  const savedTheme = window.localStorage.getItem("ezcord-theme");
+  if (savedTheme === "light" || savedTheme === "dark") {
+    theme.value = savedTheme;
+  }
   window.addEventListener("pagehide", beaconLeaveActiveRoom);
   if (typeof route.query.chat_id === "string") {
     telegramChatId.value = route.query.chat_id;
@@ -829,7 +853,7 @@ useHead({
 </script>
 
 <template>
-  <main class="ez-main">
+  <main class="ez-main" :data-theme="theme">
     <header class="ez-topbar">
       <div class="ez-topbar__inner">
         <button class="ez-brand" type="button" @click="activeRoom ? exitRoom() : undefined">
@@ -843,7 +867,9 @@ useHead({
         </button>
 
         <div class="ez-top-actions">
-          <button class="ez-icon-btn" type="button" aria-label="Theme">◐</button>
+          <button class="ez-icon-btn" type="button" :aria-label="themeLabel" :title="themeLabel" @click="toggleTheme">
+            {{ theme === "light" ? "☾" : "☀" }}
+          </button>
           <button v-if="user && activeRoom" class="ez-nav-btn" type="button" @click="exitRoom">Лобби</button>
           <button v-if="user" class="ez-user-pill" type="button" title="Выйти" @click="logout">
             <span class="ez-user-name">{{ user.displayName }}</span>
