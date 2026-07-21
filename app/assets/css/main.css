@@ -55,14 +55,23 @@ select {
 }
 
 .ez-brand__logo {
+  display: grid;
   height: 48px;
   width: 48px;
   flex-shrink: 0;
+  place-items: center;
   border-radius: 15px;
   border: 1px solid rgba(127, 148, 184, 0.24);
-  background: #070a0f;
-  object-fit: cover;
+  background:
+    radial-gradient(circle at 76% 18%, rgba(88, 255, 114, 0.14), transparent 34%),
+    linear-gradient(180deg, #101722, #070a0f);
+  color: #8fb7ff;
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
+}
+
+.ez-brand__logo-icon {
+  height: 28px;
+  width: 28px;
 }
 
 .ez-brand__title {

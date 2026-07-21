@@ -833,7 +833,9 @@ useHead({
     <header class="ez-topbar">
       <div class="ez-topbar__inner">
         <button class="ez-brand" type="button" @click="activeRoom ? exitRoom() : undefined">
-          <img class="ez-brand__logo" src="/ezcord-mark.svg" alt="Ezcord" />
+          <span class="ez-brand__logo" aria-hidden="true">
+            <EzcordLogo class="ez-brand__logo-icon" />
+          </span>
           <span class="min-w-0">
             <span class="ez-brand__title"><span class="ez-brand__title-accent">EZ</span>CORD</span>
             <span class="ez-brand__subtitle">Голосовые комнаты для Telegram</span>
@@ -854,7 +856,9 @@ useHead({
     <div class="ez-page-bg">
       <div v-if="isBooting" class="ez-boot">
         <div class="ez-boot-card">
-          <img class="ez-brand__logo" src="/ezcord-mark.svg" alt="Ezcord" />
+          <span class="ez-brand__logo" aria-hidden="true">
+            <EzcordLogo class="ez-brand__logo-icon" />
+          </span>
           <div>
             <p class="ez-brand__title"><span class="ez-brand__title-accent">EZ</span>CORD</p>
             <p class="ez-kicker">загрузка</p>

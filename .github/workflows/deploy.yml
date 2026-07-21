@@ -65,10 +65,9 @@ jobs:
           DEPLOY_USER: ${{ secrets.EZCORD_DEPLOY_USER }}
         run: |
           tar -cf /tmp/ezcord-deploy.tar \
+            app/components/EzcordLogo.vue \
             app/assets/css/main.css \
             app/pages/ezcord.vue \
-            public/ezcord-logo.png \
-            public/ezcord-mark.svg \
             server/api/ezcord \
             server/utils/ezcord.ts \
             server/utils/ezcordRealtime.ts \
@@ -86,6 +85,7 @@ jobs:
             cd $REMOTE_APP_DIR
             tar -xf /tmp/ezcord-deploy.tar
             rm -f /tmp/ezcord-deploy.tar
+            rm -f public/ezcord-logo.png public/ezcord-mark.svg
             find app server public -name '._*' -type f -delete
             bash -lc 'source /root/.nvm/nvm.sh && npm install && npm run build && pm2 restart $REMOTE_PM2_APP --update-env'
           "
