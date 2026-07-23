@@ -3,7 +3,9 @@ import {
   approveTelegramLoginRequest,
   bindTelegramLoginRequest,
   deleteTelegramMessage,
+  ezcordRoomWebAppUrl,
   getEzcordEnv,
+  getEzcordRoom,
   sendTelegramControlMessage,
   sendTelegramMessage,
 } from "../../../utils/ezcord";
@@ -119,12 +121,21 @@ export default defineEventHandler(async (event) => {
       return { ok: true };
     }
 
-    const roomUrl = new URL(baseWebAppUrl);
-    roomUrl.searchParams.set("room", roomLaunch.roomId);
-    if (roomLaunch.inviteCode) roomUrl.searchParams.set("invite", roomLaunch.inviteCode);
+    const room = await getEzcordRoom(roomLaunch.roomId);
+    if (!room || room.closedAt) {
+      await sendTelegramControlMessage(chatId, "Ezcord\nКомната не найдена или уже закрыта.", { inline_keyboard: [] });
+      return { ok: true };
+    }
 
-    await sendTelegramControlMessage(chatId, "Ezcord\nВас пригласили в голосовую комнату.", {
-      inline_keyboard: [[{ text: "Войти в комнату", web_app: { url: roomUrl.toString() } }]],
+    if (room.inviteCode && room.inviteCode !== roomLaunch.inviteCode) {
+      await sendTelegramControlMessage(chatId, "Ezcord\nСсылка на комнату устарела. Попросите новое приглашение.", { inline_keyboard: [] });
+      return { ok: true };
+    }
+
+    const roomUrl = ezcordRoomWebAppUrl(room.id, roomLaunch.inviteCode);
+
+    await sendTelegramControlMessage(chatId, `Ezcord\nКомната: ${room.name}\nНажмите кнопку, чтобы войти.`, {
+      inline_keyboard: [[{ text: "Войти в комнату", web_app: { url: roomUrl } }]],
     });
     return { ok: true };
   }
