@@ -12,10 +12,14 @@ const roomSockets = new Map<string, Map<string, EzcordRealtimePeer>>();
 
 export function attachEzcordRealtimePeer(roomId: string, peerId: string, userId: string, peer: any): void {
   const sockets = getRoomSockets(roomId);
-  const existing = sockets.get(peerId);
-  if (existing && existing.peer !== peer) {
+
+  for (const [existingPeerId, existing] of Array.from(sockets.entries())) {
+    if (existing.peer === peer) continue;
+    if (existingPeerId !== peerId && existing.userId !== userId) continue;
+
     sendEzcordRealtimePayload(existing.peer, { type: "replaced", message: "Открыто новое подключение" });
     existing.peer.close?.(1000, "Replaced");
+    sockets.delete(existingPeerId);
   }
 
   sockets.set(peerId, {

@@ -27,6 +27,7 @@ interface Room {
 
 interface Peer {
   peerId: string;
+  userId?: string;
   displayName: string;
   lastSeenAt: string;
 }
@@ -405,7 +406,7 @@ function watchMicLevel(stream: MediaStream) {
 function startSignaling() {
   if (!activeRoom.value) return;
 
-  localPeerId.value = randomClientId();
+  localPeerId.value = getRoomPeerId(activeRoom.value.id, user.value?.id || "user");
   peers.value = [];
   connectedPeerIds.value = [];
   lastSignalAt = "";
@@ -556,6 +557,13 @@ function startWebSocketSignaling() {
       roomSocket = null;
     }
 
+    if (event.reason === "Replaced") {
+      statusMessage.value = "Открыто новое подключение";
+      activeRoom.value = null;
+      cleanupVoice();
+      return;
+    }
+
     if (isLeavingRoom || !activeRoom.value) return;
 
     if (event.code === 4003) {
@@ -598,16 +606,24 @@ async function handleSocketMessage(event: MessageEvent) {
     return;
   }
 
+  if (message.type === "replaced") {
+    statusMessage.value = message.message || "Открыто новое подключение";
+    activeRoom.value = null;
+    cleanupVoice();
+    return;
+  }
+
   if (message.type === "error") {
     errorMessage.value = message.message || "Ошибка голосовой комнаты";
   }
 }
 
 async function syncPeers(remotePeers: Peer[]) {
-  peers.value = remotePeers;
-  const remoteIds = new Set(remotePeers.map((peer) => peer.peerId));
+  const visiblePeers = normalizeRemotePeers(remotePeers);
+  peers.value = visiblePeers;
+  const remoteIds = new Set(visiblePeers.map((peer) => peer.peerId));
 
-  for (const peer of remotePeers) {
+  for (const peer of visiblePeers) {
     await ensurePeerConnection(peer.peerId, localPeerId.value < peer.peerId);
   }
 
@@ -818,6 +834,35 @@ function roomWsPath() {
 
 function randomClientId() {
   return `peer_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
+}
+
+function getRoomPeerId(roomId: string, userId: string) {
+  if (typeof window === "undefined") return randomClientId();
+
+  const key = `ezcord-peer:${userId}:${roomId}`;
+  const savedPeerId = window.localStorage.getItem(key);
+  if (savedPeerId) return savedPeerId;
+
+  const peerId = randomClientId();
+  window.localStorage.setItem(key, peerId);
+  return peerId;
+}
+
+function normalizeRemotePeers(remotePeers: Peer[]) {
+  const selfUserId = user.value?.id || "";
+  const latestByUser = new Map<string, Peer>();
+
+  for (const peer of remotePeers) {
+    if (selfUserId && peer.userId === selfUserId) continue;
+
+    const key = peer.userId || peer.peerId;
+    const existing = latestByUser.get(key);
+    if (!existing || new Date(peer.lastSeenAt).getTime() >= new Date(existing.lastSeenAt).getTime()) {
+      latestByUser.set(key, peer);
+    }
+  }
+
+  return Array.from(latestByUser.values());
 }
 
 function getInitials(value: string) {

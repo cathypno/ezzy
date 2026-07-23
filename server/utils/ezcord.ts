@@ -554,6 +554,14 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
   if (useRedisLiveState()) {
     const redis = await getRedis();
     const key = roomPeersKey(roomId);
+    const existingPeers = (await redis.hvals(key)).map((value: string) => JSON.parse(value) as EzcordPeer);
+    const duplicatePeerIds = existingPeers.filter((item: EzcordPeer) => item.userId === user.id && item.peerId !== peerId).map((item) => item.peerId);
+
+    if (duplicatePeerIds.length > 0) {
+      await redis.hdel(key, ...duplicatePeerIds);
+      await Promise.all(duplicatePeerIds.map((duplicatePeerId) => deleteSignalKeys(roomId, duplicatePeerId)));
+    }
+
     const exists = await redis.hexists(key, peerId);
     if (!exists) {
       const count = await redis.hlen(key);
@@ -566,6 +574,15 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
   }
 
   const data = readEzcordData();
+  const duplicatePeerIds = data.peers.filter((item) => item.roomId === roomId && item.userId === user.id && item.peerId !== peerId).map((item) => item.peerId);
+  if (duplicatePeerIds.length > 0) {
+    const duplicatePeerIdSet = new Set(duplicatePeerIds);
+    data.peers = data.peers.filter((item) => !(item.roomId === roomId && duplicatePeerIdSet.has(item.peerId)));
+    data.signals = data.signals.filter(
+      (signal) => signal.roomId !== roomId || (!duplicatePeerIdSet.has(signal.fromPeerId) && !duplicatePeerIdSet.has(signal.toPeerId)),
+    );
+  }
+
   const existingPeer = data.peers.find((item) => item.roomId === roomId && item.peerId === peerId);
   if (existingPeer) {
     existingPeer.displayName = user.displayName;
@@ -585,11 +602,17 @@ export async function listEzcordPeers(roomId: string, excludePeerId = ""): Promi
   if (useRedisLiveState()) {
     const redis = await getRedis();
     const values = await redis.hvals(roomPeersKey(roomId));
-    return values.map((value: string) => JSON.parse(value) as EzcordPeer).filter((peer: EzcordPeer) => peer.peerId !== excludePeerId);
+    return normalizeEzcordPeerList(
+      values.map((value: string) => JSON.parse(value) as EzcordPeer),
+      excludePeerId,
+    );
   }
 
   const data = readEzcordData();
-  return data.peers.filter((peer) => peer.roomId === roomId && peer.peerId !== excludePeerId);
+  return normalizeEzcordPeerList(
+    data.peers.filter((peer) => peer.roomId === roomId),
+    excludePeerId,
+  );
 }
 
 export async function leaveEzcordPeer(roomId: string, peerId: string, userId: string): Promise<void> {
@@ -610,6 +633,20 @@ export async function leaveEzcordPeer(roomId: string, peerId: string, userId: st
   data.peers = data.peers.filter((peer) => !(peer.roomId === roomId && peer.peerId === peerId && peer.userId === userId));
   data.signals = data.signals.filter((signal) => signal.roomId !== roomId || (signal.fromPeerId !== peerId && signal.toPeerId !== peerId));
   writeEzcordData(data);
+}
+
+function normalizeEzcordPeerList(peers: EzcordPeer[], excludePeerId = ""): EzcordPeer[] {
+  const latestByUser = new Map<string, EzcordPeer>();
+
+  for (const peer of peers) {
+    const key = peer.userId || peer.peerId;
+    const existing = latestByUser.get(key);
+    if (!existing || new Date(peer.lastSeenAt).getTime() >= new Date(existing.lastSeenAt).getTime()) {
+      latestByUser.set(key, peer);
+    }
+  }
+
+  return Array.from(latestByUser.values()).filter((peer) => peer.peerId !== excludePeerId);
 }
 
 export async function kickEzcordPeer(room: EzcordRoom, peerId: string, actor: EzcordUser): Promise<EzcordPeer | null> {
