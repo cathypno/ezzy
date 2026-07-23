@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useEzcordVisualizerBars } from "~/composables/useEzcordVisualizerBars";
 import type { Peer, Room } from "~/types/ezcord";
 import { getInitials } from "~/utils/ezcord";
 
@@ -47,8 +48,10 @@ function isPeerSpeaking(peerId: string) {
   return props.speakingPeerIds.includes(peerId);
 }
 
+const { barCount, barGridStyle, visualizerElement } = useEzcordVisualizerBars();
+
 const visualizerBars = computed(() =>
-  Array.from({ length: 34 }, (_, index) => {
+  Array.from({ length: barCount.value }, (_, index) => {
     const base = props.waveBars[index % props.waveBars.length] || 32;
     const swell = Math.round(Math.abs(Math.sin(index * 0.72)) * 34);
     return Math.max(22, Math.min(96, Math.round((base + swell) * 0.92)));
@@ -134,12 +137,12 @@ const visualizerBars = computed(() =>
           <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">Голос</span>
           <span class="text-xs font-black uppercase leading-[1.2]" :class="props.isMicOn ? 'text-[#ff4d4f]' : 'text-ez-widget-muted'">{{ props.isMicOn ? "Live" : "Muted" }}</span>
         </div>
-        <div class="ez-voice-lava relative mt-2.5 h-[74px] overflow-hidden rounded-[14px] border border-white/[.04] bg-ez-widget-field p-3" :class="props.isMicOn ? 'opacity-100' : 'opacity-[.58]'">
-          <div class="relative z-10 grid h-full items-end gap-[clamp(3px,0.52vw,8px)] [grid-template-columns:repeat(34,minmax(3px,1fr))]">
+        <div ref="visualizerElement" class="ez-voice-lava relative mt-2.5 h-[74px] overflow-hidden rounded-[14px] border border-white/[.04] bg-ez-widget-field p-3" :class="props.isMicOn ? 'opacity-100' : 'opacity-[.58]'">
+          <div class="relative z-10 grid h-full items-end" :style="barGridStyle">
           <span
             v-for="(height, index) in visualizerBars"
             :key="index"
-            class="ez-voice-bar min-h-3 origin-bottom rounded-full bg-gradient-to-t from-[#237e13] via-ez-green to-[#baff82]"
+            class="ez-voice-bar min-h-3 w-[clamp(3px,0.34vw,5px)] origin-bottom justify-self-center rounded-full bg-gradient-to-t from-[#237e13] via-ez-green to-[#baff82]"
             :class="props.isMicOn ? '' : 'bg-none bg-ez-widget-muted/45'"
             :style="{
               height: `${Math.max(18, Math.round((height * (props.micLevel + 48)) / 138))}%`,

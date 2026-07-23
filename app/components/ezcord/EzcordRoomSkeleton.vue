@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useEzcordVisualizerBars } from "~/composables/useEzcordVisualizerBars";
+
 const props = withDefaults(
   defineProps<{
     errorMessage?: string;
@@ -18,7 +21,10 @@ defineEmits<{
 
 const chips = ["w-16", "w-24", "w-28"];
 const avatars = [0, 1];
-const visualizerBars = Array.from({ length: 34 }, (_, index) => 22 + Math.round(Math.abs(Math.sin(index * 0.74)) * 58));
+const { barCount, barGridStyle, visualizerElement } = useEzcordVisualizerBars();
+const visualizerBars = computed(() =>
+  Array.from({ length: barCount.value }, (_, index) => 22 + Math.round(Math.abs(Math.sin(index * 0.74)) * 58)),
+);
 </script>
 
 <template>
@@ -60,12 +66,12 @@ const visualizerBars = Array.from({ length: 34 }, (_, index) => 22 + Math.round(
             <span class="h-3 w-14 animate-pulse rounded-full bg-ez-widget-field"></span>
             <span class="h-3 w-12 animate-pulse rounded-full bg-ez-widget-field"></span>
           </div>
-          <div class="ez-voice-lava relative mt-2.5 h-[74px] overflow-hidden rounded-[14px] border border-white/[.04] bg-ez-widget-field p-3 opacity-[.54]">
-            <div class="relative z-10 grid h-full items-end gap-[clamp(3px,0.52vw,8px)] [grid-template-columns:repeat(34,minmax(3px,1fr))]">
+          <div ref="visualizerElement" class="ez-voice-lava relative mt-2.5 h-[74px] overflow-hidden rounded-[14px] border border-white/[.04] bg-ez-widget-field p-3 opacity-[.54]">
+            <div class="relative z-10 grid h-full items-end" :style="barGridStyle">
               <span
                 v-for="(height, index) in visualizerBars"
                 :key="index"
-                class="ez-voice-bar min-h-3 origin-bottom rounded-full bg-gradient-to-t from-[#237e13] via-ez-green to-[#baff82]"
+                class="ez-voice-bar min-h-3 w-[clamp(3px,0.34vw,5px)] origin-bottom justify-self-center rounded-full bg-gradient-to-t from-[#237e13] via-ez-green to-[#baff82]"
                 :style="{
                   height: `${height}%`,
                   animationDelay: `${index * -0.07}s`,
