@@ -69,6 +69,8 @@ Set `EZCORD_BOT_TOKEN`, `EZCORD_WEBAPP_URL` and optionally `EZCORD_BOT_USERNAME`
 
 On the website, `Войти через Telegram` creates a short-lived one-time link. The bot sends one confirmation message with an `Авторизоваться` button; after the click, the website receives a session for the same Telegram account. `EZCORD_BOT_USERNAME` can be omitted because the server resolves it through Telegram `getMe`.
 
+Room invites use Telegram Mini App deep links with `startapp`. Configure the bot's Main Mini App in `@BotFather`; if the app is created with a short name, set `EZCORD_BOT_APP_SHORT_NAME`. Otherwise the link uses the Main Mini App assigned to the bot.
+
 The webhook endpoint is:
 
 ```text

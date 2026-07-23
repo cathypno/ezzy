@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   return {
     room: {
       ...room,
-      inviteUrl: room.createdBy === user.id ? roomInviteUrl(room) : undefined,
+      inviteUrl: room.createdBy === user.id ? await roomInviteUrl(room) : undefined,
     },
     voice: {
       provider: "webrtc-mesh",

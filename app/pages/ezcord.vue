@@ -23,11 +23,13 @@ const copiedRoomId = ref("");
 const isRoomSettingsSaving = ref(false);
 const isTelegramLoginLoading = ref(false);
 const telegramLoginUrl = ref("");
+const telegramRoomId = ref("");
+const telegramInviteCode = ref("");
 let telegramLoginTimer = 0;
 let telegramLoginPollInFlight = false;
 
-const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : ""));
-const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : ""));
+const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : telegramRoomId.value));
+const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : telegramInviteCode.value));
 const waveBars = [18, 30, 46, 26, 58, 74, 34, 50, 24, 62, 40, 22];
 const maxRoomParticipants = 5;
 
@@ -338,6 +340,22 @@ function prepareTelegramApp() {
   app.expand?.();
 }
 
+function hydrateTelegramLaunch() {
+  if (typeof window === "undefined") return;
+
+  const app = (window as any).Telegram?.WebApp;
+  const startParam =
+    String(app?.initDataUnsafe?.start_param || "") ||
+    new URLSearchParams(window.location.search).get("tgWebAppStartParam") ||
+    "";
+  const [prefix, roomId, inviteCode] = startParam.split(":");
+
+  if (prefix !== "ezroom" || !roomId) return;
+
+  telegramRoomId.value = roomId;
+  telegramInviteCode.value = inviteCode || "";
+}
+
 function scrollToAppTop() {
   window.requestAnimationFrame(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -346,12 +364,14 @@ function scrollToAppTop() {
 
 onMounted(async () => {
   prepareTelegramApp();
+  hydrateTelegramLaunch();
   window.addEventListener("pagehide", beaconLeaveActiveRoom);
 
   try {
     await fetchMe();
     if (!user.value) {
       await authenticateTelegram();
+      hydrateTelegramLaunch();
     }
     if (user.value) {
       await enterStartRoom();

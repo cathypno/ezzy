@@ -812,10 +812,21 @@ export async function updateEzcordRoomSettings(
   return storedRoom;
 }
 
-export function roomInviteUrl(room: EzcordRoom): string {
+export async function roomInviteUrl(room: EzcordRoom): Promise<string> {
   const baseUrl = getEzcordEnv("EZCORD_WEBAPP_URL") || "https://rocketseven.ru/ezcord";
-  if (!room.inviteCode) return `${baseUrl}?room=${room.id}`;
-  return `${baseUrl}?room=${room.id}&invite=${room.inviteCode}`;
+  const configuredBotUsername = getEzcordEnv("EZCORD_BOT_USERNAME").replace(/^@/, "");
+  const botUsername = configuredBotUsername || (await getTelegramBotUsername().catch(() => ""));
+
+  if (botUsername) {
+    const appShortName = getEzcordEnv("EZCORD_BOT_APP_SHORT_NAME").replace(/^@/, "");
+    const payload = ["ezroom", room.id, room.inviteCode].filter(Boolean).join(":");
+    const appPath = appShortName ? `/${encodeURIComponent(appShortName)}` : "";
+    return `https://t.me/${botUsername}${appPath}?startapp=${encodeURIComponent(payload)}`;
+  }
+
+  const query = new URLSearchParams({ room: room.id });
+  if (room.inviteCode) query.set("invite", room.inviteCode);
+  return `${baseUrl}?${query.toString()}`;
 }
 
 export async function requireRoomAccess(event: H3Event): Promise<{ user: EzcordUser; room: EzcordRoom; inviteCode: string }> {
@@ -1142,12 +1153,6 @@ export async function sendTelegramMessage(chatId: number | string, text: string,
         {
           text: "Открыть Ezcord",
           web_app: { url: webAppUrl },
-        },
-      ],
-      [
-        {
-          text: "Открыть ссылкой",
-          url: webAppUrl,
         },
       ],
     ],

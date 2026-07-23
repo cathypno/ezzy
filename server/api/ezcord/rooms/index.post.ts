@@ -38,5 +38,5 @@ export default defineEventHandler(async (event) => {
     telegramChatId: body.telegramChatId,
   });
 
-  return { ok: true, room: { ...room, inviteUrl: roomInviteUrl(room) } };
+  return { ok: true, room: { ...room, inviteUrl: await roomInviteUrl(room) } };
 });

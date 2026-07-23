@@ -3,9 +3,11 @@ export default defineEventHandler(async (event) => {
   const rooms = await listEzcordRooms(user);
 
   return {
-    rooms: rooms.map((room) => ({
-      ...room,
-      inviteUrl: room.createdBy === user?.id ? roomInviteUrl(room) : undefined,
-    })),
+    rooms: await Promise.all(
+      rooms.map(async (room) => ({
+        ...room,
+        inviteUrl: room.createdBy === user?.id ? await roomInviteUrl(room) : undefined,
+      })),
+    ),
   };
 });

@@ -3,5 +3,5 @@ export default defineEventHandler(async (event) => {
   await checkEzcordRateLimit(event, "rooms", 60);
 
   const room = await getOrCreateEzcordHomeRoom(user);
-  return { ok: true, room: { ...room, inviteUrl: roomInviteUrl(room) } };
+  return { ok: true, room: { ...room, inviteUrl: await roomInviteUrl(room) } };
 });

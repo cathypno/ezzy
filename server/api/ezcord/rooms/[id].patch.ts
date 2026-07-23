@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
     ok: true,
     room: {
       ...updatedRoom,
-      inviteUrl: roomInviteUrl(updatedRoom),
+      inviteUrl: await roomInviteUrl(updatedRoom),
     },
   };
 });
