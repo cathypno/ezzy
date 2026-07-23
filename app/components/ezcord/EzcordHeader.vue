@@ -4,10 +4,20 @@ import type { User } from "~/types/ezcord";
 import { formatEzcordPoints, getEzcordLevel } from "~/utils/ezcord";
 
 defineProps<{
+  canUseLobby: boolean;
   user: User | null;
 }>();
 
+const emit = defineEmits<{
+  "open-lobby": [];
+}>();
+
 const rewardsOpen = ref(false);
+
+function openLobby() {
+  rewardsOpen.value = false;
+  emit("open-lobby");
+}
 </script>
 
 <template>
@@ -24,6 +34,21 @@ const rewardsOpen = ref(false);
       </div>
 
       <div class="relative flex shrink-0 items-center gap-2.5">
+        <button
+          v-if="user"
+          class="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-2xl border border-ez-line bg-ez-card text-[24px] text-ez-green shadow-ez transition hover:-translate-y-px hover:border-ez-green/45 disabled:cursor-default disabled:opacity-[.38] disabled:hover:translate-y-0 disabled:hover:border-ez-line max-[760px]:h-[50px] max-[760px]:w-[50px]"
+          :disabled="!canUseLobby"
+          type="button"
+          :aria-label="canUseLobby ? 'Открыть лобби' : 'Лобби откроется на Level 2'"
+          :title="canUseLobby ? 'Лобби' : 'Лобби откроется на Level 2'"
+          @click="openLobby"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path fill="currentColor" d="M5.5 4A2.5 2.5 0 0 0 3 6.5v11A2.5 2.5 0 0 0 5.5 20h13a2.5 2.5 0 0 0 2.5-2.5v-11A2.5 2.5 0 0 0 18.5 4zm0 2h13a.5.5 0 0 1 .5.5V8H5V6.5a.5.5 0 0 1 .5-.5M5 10h4v8H5zm6 0h8v2h-8zm0 4h8v4h-8z" />
+          </svg>
+        </button>
+
         <button
           v-if="user"
           class="inline-flex min-h-[54px] items-center gap-3 rounded-2xl border border-ez-line bg-ez-card px-4 py-2 text-left shadow-ez transition hover:-translate-y-px max-[760px]:min-h-[50px] max-[760px]:px-3"

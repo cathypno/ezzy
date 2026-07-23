@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import EzcordAuthScreen from "~/components/ezcord/EzcordAuthScreen.vue";
+import EzcordBootScreen from "~/components/ezcord/EzcordBootScreen.vue";
 import EzcordHeader from "~/components/ezcord/EzcordHeader.vue";
+import EzcordLobbyModal from "~/components/ezcord/EzcordLobbyModal.vue";
+import EzcordRoomPendingScreen from "~/components/ezcord/EzcordRoomPendingScreen.vue";
 import EzcordRoomScreen from "~/components/ezcord/EzcordRoomScreen.vue";
 import { useEzcordVoice } from "~/composables/useEzcordVoice";
 import type { Room, RoomGame, RoomGoal, User } from "~/types/ezcord";
-import { getInitials } from "~/utils/ezcord";
+import { getEzcordLevel, getInitials } from "~/utils/ezcord";
 import { decodeEzcordRoomLaunch } from "#shared/ezcord-launch";
 
 const route = useRoute();
@@ -26,10 +29,14 @@ const isTelegramLoginLoading = ref(false);
 const telegramLoginUrl = ref("");
 const telegramRoomId = ref("");
 const telegramInviteCode = ref("");
+const lobbyOpen = ref(false);
+const lobbyRooms = ref<Room[]>([]);
+const isLobbyLoading = ref(false);
 let telegramLoginTimer = 0;
 let telegramLoginPollInFlight = false;
 let rewardsTimer = 0;
 let rewardsTickInFlight = false;
+let lobbyRequestId = 0;
 
 const roomFromQuery = computed(() => {
   const roomId = typeof route.query.room === "string" ? route.query.room.trim() : "";
@@ -67,6 +74,7 @@ const {
 });
 
 const participantCount = computed(() => peers.value.length + (isWaiting.value ? 0 : user.value ? 1 : 0));
+const canUseLobby = computed(() => Boolean(user.value && getEzcordLevel(user.value.points) >= 2));
 const visibleMicOn = computed(() => isMicOn.value);
 const visibleMicLevel = computed(() => micLevel.value);
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
@@ -282,6 +290,40 @@ async function openRoom(roomId: string, invite = "") {
   }
 }
 
+async function openLobby() {
+  if (!canUseLobby.value) return;
+  lobbyOpen.value = true;
+  await refreshLobbyRooms();
+}
+
+async function refreshLobbyRooms() {
+  if (!user.value) return;
+  const requestId = ++lobbyRequestId;
+  isLobbyLoading.value = true;
+
+  try {
+    const response = await $fetch<{ rooms: Room[] }>("/api/ezcord/rooms");
+    if (requestId === lobbyRequestId) {
+      lobbyRooms.value = response.rooms;
+    }
+  } catch (error: any) {
+    errorMessage.value = error?.data?.message || "Не получилось открыть лобби";
+  } finally {
+    if (requestId === lobbyRequestId) {
+      isLobbyLoading.value = false;
+    }
+  }
+}
+
+async function joinLobbyRoom(room: Room) {
+  lobbyOpen.value = false;
+  await openRoom(room.id);
+}
+
+function handleEmptyLobbyFilter() {
+  statusMessage.value = "Нет комнат под выбранный фильтр";
+}
+
 function handleToggleMic() {
   void toggleMic();
 }
@@ -451,20 +493,10 @@ useHead({
 
 <template>
   <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
-    <EzcordHeader :user="user" />
+    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" />
 
     <div class="min-h-[calc(100vh-74px)]">
-      <div v-if="isBooting" class="flex min-h-[calc(100vh-74px)] items-center justify-center p-6">
-        <div class="flex items-center gap-4 rounded-[18px] border border-ez-line bg-ez-card p-[18px] shadow-ez">
-          <span class="grid h-12 w-12 shrink-0 place-items-center text-ez-green" aria-hidden="true">
-            <EzcordLogo class="h-12 w-12 scale-x-[-1]" />
-          </span>
-          <div>
-            <p class="block text-[22px] font-black leading-none text-ez-ink"><span class="text-ez-green">EZ</span>CORD</p>
-            <p class="mt-1 text-xs font-black uppercase leading-[1.2] text-ez-muted">загрузка комнаты</p>
-          </div>
-        </div>
-      </div>
+      <EzcordBootScreen v-if="isBooting" />
 
       <EzcordAuthScreen
         v-else-if="!user"
@@ -497,22 +529,7 @@ useHead({
         </section>
       </div>
 
-      <div v-else-if="!activeRoom" class="flex min-h-[calc(100vh-74px)] items-center justify-center px-6 py-7 max-[760px]:px-3.5">
-        <section class="grid w-full max-w-[420px] gap-3.5 rounded-[18px] border border-ez-line bg-gradient-to-b from-ez-card to-ez-card-2 p-[22px] shadow-ez">
-          <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Комната</p>
-          <h1 class="-mt-1 text-[25px] font-black leading-[1.08] text-ez-ink">Готовим комнату</h1>
-          <p class="text-sm font-bold leading-[1.55] text-ez-muted">Откроем комнату из ссылки или вашу пустую комнату.</p>
-          <button
-            class="inline-flex min-h-[50px] items-center justify-center rounded-[14px] bg-gradient-to-br from-[#8ef25a] to-ez-green-dark px-[18px] text-[15px] font-black text-[#082900] shadow-[0_14px_30px_-12px_rgba(82,207,28,0.72)] transition hover:-translate-y-px disabled:cursor-default disabled:opacity-[.58] disabled:hover:translate-y-0"
-            :disabled="isLoading"
-            type="button"
-            @click="openHomeRoom"
-          >
-            Открыть свою комнату
-          </button>
-          <p v-if="errorMessage" class="rounded-[18px] border border-[#e5484d]/35 bg-[#e5484d]/10 px-4 py-3.5 text-[13px] font-extrabold text-[#ff9aa2]">{{ errorMessage }}</p>
-        </section>
-      </div>
+      <EzcordRoomPendingScreen v-else-if="!activeRoom" :error-message="errorMessage" :is-loading="isLoading" @open="openHomeRoom" />
 
       <EzcordRoomScreen
         v-else
@@ -541,5 +558,14 @@ useHead({
         @update-room="updateRoomSettings"
       />
     </div>
+
+    <EzcordLobbyModal
+      :loading="isLobbyLoading"
+      :open="lobbyOpen"
+      :rooms="lobbyRooms"
+      @close="lobbyOpen = false"
+      @empty="handleEmptyLobbyFilter"
+      @join="joinLobbyRoom"
+    />
   </main>
 </template>

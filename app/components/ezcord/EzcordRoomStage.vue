@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Peer, Room } from "~/types/ezcord";
 import { getInitials } from "~/utils/ezcord";
 
@@ -45,10 +46,18 @@ function hideBrokenAvatar(event: Event) {
 function isPeerSpeaking(peerId: string) {
   return props.speakingPeerIds.includes(peerId);
 }
+
+const visualizerBars = computed(() =>
+  Array.from({ length: 34 }, (_, index) => {
+    const base = props.waveBars[index % props.waveBars.length] || 32;
+    const swell = Math.round(Math.abs(Math.sin(index * 0.72)) * 34);
+    return Math.max(22, Math.min(96, Math.round((base + swell) * 0.92)));
+  }),
+);
 </script>
 
 <template>
-  <section class="relative min-h-[clamp(420px,calc(100vh-220px),640px)] overflow-hidden rounded-[18px] bg-gradient-to-b from-ez-widget to-[#0d0f0d] p-[clamp(20px,2.5vw,28px)] text-white shadow-ez-stage max-[760px]:p-[18px]">
+  <section class="relative overflow-hidden rounded-[18px] bg-gradient-to-b from-ez-widget to-[#0d0f0d] p-[clamp(20px,2.5vw,28px)] text-white shadow-ez-stage max-[760px]:p-[18px]">
     <div class="flex items-start justify-between gap-4">
       <div class="flex flex-wrap items-center gap-2.5">
         <span class="inline-flex min-h-7 items-center justify-center rounded-[9px] bg-ez-green-soft px-2.5 text-xs font-black text-ez-green-dark">{{ accessGlyphs[props.room.access] }}</span>
@@ -125,16 +134,20 @@ function isPeerSpeaking(peerId: string) {
           <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">Голос</span>
           <span class="text-xs font-black uppercase leading-[1.2]" :class="props.isMicOn ? 'text-[#ff4d4f]' : 'text-ez-widget-muted'">{{ props.isMicOn ? "Live" : "Muted" }}</span>
         </div>
-        <div class="mt-2.5 flex h-[70px] items-end justify-center gap-2 rounded-[14px] bg-ez-widget-field p-4">
+        <div class="ez-voice-lava relative mt-2.5 h-[74px] overflow-hidden rounded-[14px] border border-white/[.04] bg-ez-widget-field p-3" :class="props.isMicOn ? 'opacity-100' : 'opacity-[.58]'">
+          <div class="relative z-10 grid h-full items-end gap-[clamp(3px,0.52vw,8px)] [grid-template-columns:repeat(34,minmax(3px,1fr))]">
           <span
-            v-for="(height, index) in props.waveBars"
-            :key="height"
-            class="w-[5px] origin-bottom animate-[ez-eq_1.1s_ease-in-out_infinite_alternate] rounded-full bg-gradient-to-b from-[#8ef25a] to-ez-green"
-            :class="!props.isMicOn ? 'bg-ez-widget-muted/45 [animation-play-state:paused]' : index % 3 === 0 ? 'animate-[ez-eq_1.32s_ease-in-out_infinite_alternate]' : index % 2 === 0 ? 'animate-[ez-eq_1.1s_ease-in-out_infinite_alternate]' : 'animate-[ez-eq_.86s_ease-in-out_infinite_alternate]'"
+            v-for="(height, index) in visualizerBars"
+            :key="index"
+            class="ez-voice-bar min-h-3 origin-bottom rounded-full bg-gradient-to-t from-[#237e13] via-ez-green to-[#baff82]"
+            :class="props.isMicOn ? '' : 'bg-none bg-ez-widget-muted/45'"
             :style="{
-              height: `${Math.max(12, Math.round((height * (props.micLevel + 28)) / 100))}px`,
+              height: `${Math.max(18, Math.round((height * (props.micLevel + 48)) / 138))}%`,
+              animationDelay: `${index * -0.07}s`,
+              animationDuration: `${0.9 + (index % 7) * 0.09}s`,
             }"
           />
+          </div>
         </div>
       </div>
       <button
