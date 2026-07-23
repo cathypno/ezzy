@@ -92,7 +92,7 @@ async function submitAuth() {
 }
 
 async function authenticateTelegram() {
-  const initData = getTelegramInitData();
+  const initData = await waitForTelegramInitData();
   if (!initData) return false;
 
   try {
@@ -313,6 +313,22 @@ async function writeClipboardText(text: string) {
 
 function getTelegramInitData() {
   return typeof window !== "undefined" ? (window as any).Telegram?.WebApp?.initData || "" : "";
+}
+
+async function waitForTelegramInitData() {
+  if (typeof window === "undefined") return "";
+
+  const startedAt = Date.now();
+  const timeoutMs = 5000;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    prepareTelegramApp();
+    const initData = getTelegramInitData();
+    if (initData) return initData;
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
+  }
+
+  return getTelegramInitData();
 }
 
 function prepareTelegramApp() {
