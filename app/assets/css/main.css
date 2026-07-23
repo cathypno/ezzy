@@ -131,6 +131,7 @@ button {
 .ez-brand__logo-icon {
   height: 28px;
   width: 28px;
+  transform: scaleX(-1);
 }
 
 .ez-brand__title {
