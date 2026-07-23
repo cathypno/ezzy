@@ -46,6 +46,7 @@ const {
   connectionDiagnostics,
   isWaiting,
   isMicOn,
+  isLocalSpeaking,
   kickPeer,
   leaveActiveRoom,
   beaconLeaveActiveRoom,
@@ -53,6 +54,7 @@ const {
   micLevel,
   peers,
   setAudioSink,
+  speakingPeerIds,
   startSignaling,
   toggleMic,
   waitingCount,
@@ -482,6 +484,7 @@ useHead({
         :copied="copiedRoomId === activeRoom.id"
         :error-message="errorMessage"
         :is-mic-on="visibleMicOn"
+        :is-local-speaking="isLocalSpeaking"
         :is-room-settings-saving="isRoomSettingsSaving"
         :is-waiting="isWaiting"
         :max-room-participants="maxRoomParticipants"
@@ -490,6 +493,7 @@ useHead({
         :peers="peers"
         :room="activeRoom"
         :set-audio-sink="setAudioSink"
+        :speaking-peer-ids="speakingPeerIds"
         :status-message="statusMessage"
         :user-id="user.id"
         :user-initial="userInitial"

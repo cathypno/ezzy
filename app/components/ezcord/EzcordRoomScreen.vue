@@ -11,6 +11,7 @@ const props = defineProps<{
   copied: boolean;
   errorMessage: string;
   isMicOn: boolean;
+  isLocalSpeaking: boolean;
   isRoomSettingsSaving: boolean;
   isWaiting: boolean;
   maxRoomParticipants: number;
@@ -19,6 +20,7 @@ const props = defineProps<{
   peers: Peer[];
   room: Room;
   setAudioSink: (element: HTMLElement | null) => void;
+  speakingPeerIds: string[];
   statusMessage: string;
   userId: string;
   userInitial: string;
@@ -85,11 +87,13 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
       <EzcordRoomStage
         :copied="props.copied"
         :is-mic-on="props.isMicOn"
+        :is-local-speaking="props.isLocalSpeaking"
         :is-waiting="props.isWaiting"
         :mic-level="props.micLevel"
         :peers="props.peers"
         :room="props.room"
         :set-audio-sink="props.setAudioSink"
+        :speaking-peer-ids="props.speakingPeerIds"
         :user-id="props.userId"
         :user-initial="props.userInitial"
         :user-photo-url="props.userPhotoUrl"

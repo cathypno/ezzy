@@ -20,6 +20,12 @@ interface IceConfigResponse {
   ttlSeconds: number;
 }
 
+interface AudioLevelWatcher {
+  audioContext: AudioContext;
+  frame: number;
+  source: MediaStreamAudioSourceNode;
+}
+
 export function useEzcordVoice({
   activeRoom,
   user,
@@ -28,11 +34,13 @@ export function useEzcordVoice({
   statusMessage,
 }: UseEzcordVoiceOptions) {
   const isMicOn = ref(false);
+  const isLocalSpeaking = ref(false);
   const micLevel = ref(0);
   const isWaiting = ref(false);
   const waitingCount = ref(0);
   const localPeerId = ref("");
   const peers = ref<Peer[]>([]);
+  const speakingPeerIds = ref<string[]>([]);
   const connectedPeerIds = ref<string[]>([]);
   const connectionDiagnostics = ref<VoiceConnectionDiagnostic[]>([]);
   const audioSink = ref<HTMLElement | null>(null);
@@ -47,13 +55,19 @@ export function useEzcordVoice({
   let roomSocket: WebSocket | null = null;
   let isLeavingRoom = false;
   let micAudioContext: AudioContext | null = null;
+  let localSpeakingUntil = 0;
   let audioUnlockInstalled = false;
   let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
   let iceConfigExpiresAt = 0;
   let iceConfigRequest: Promise<RTCIceServer[]> | null = null;
   const audioUnlockMessage = "Нажмите MIC или экран, чтобы включить звук комнаты";
+  const voiceActivityHoldMs = 420;
+  const voiceActivityThreshold = 12;
   const peerConnections = new Map<string, RTCPeerConnection>();
   const remoteAudios = new Map<string, HTMLAudioElement>();
+  const remoteAudioWatchers = new Map<string, AudioLevelWatcher>();
+  const remoteSpeakingPeerIds = new Set<string>();
+  const remoteSpeakingUntil = new Map<string, number>();
   const pendingIceCandidates = new Map<string, RTCIceCandidateInit[]>();
   const makingOffers = new Map<string, boolean>();
   const ignoredOfferPeers = new Set<string>();
@@ -94,6 +108,8 @@ export function useEzcordVoice({
     micAudioContext?.close().catch(() => {});
     micAudioContext = null;
     isMicOn.value = false;
+    isLocalSpeaking.value = false;
+    localSpeakingUntil = 0;
     micLevel.value = 0;
 
     for (const connection of peerConnections.values()) {
@@ -111,21 +127,24 @@ export function useEzcordVoice({
   function watchMicLevel(stream: MediaStream) {
     const AudioContextConstructor =
       window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
     const audioContext = new AudioContextConstructor();
     micAudioContext?.close().catch(() => {});
     micAudioContext = audioContext;
     const analyser = audioContext.createAnalyser();
     const source = audioContext.createMediaStreamSource(stream);
-    const samples = new Uint8Array(analyser.frequencyBinCount);
 
     analyser.fftSize = 256;
+    const samples = new Uint8Array(analyser.frequencyBinCount);
     source.connect(analyser);
     audioContext.resume?.().catch(() => {});
 
     const tick = () => {
       analyser.getByteFrequencyData(samples);
-      const sum = samples.reduce((total, value) => total + value, 0);
-      micLevel.value = Math.min(100, Math.round((sum / samples.length) * 1.6));
+      const level = getAudioLevel(samples);
+      micLevel.value = level;
+      updateLocalSpeaking(level);
       animationFrame = requestAnimationFrame(tick);
     };
 
@@ -198,6 +217,10 @@ export function useEzcordVoice({
     ignoredOfferPeers.clear();
     remoteAudios.forEach((audio) => audio.remove());
     remoteAudios.clear();
+    for (const peerId of Array.from(remoteAudioWatchers.keys())) {
+      stopRemoteAudioLevel(peerId);
+    }
+    speakingPeerIds.value = [];
     removeAudioUnlockHandlers();
     peers.value = [];
     connectedPeerIds.value = [];
@@ -542,7 +565,7 @@ export function useEzcordVoice({
     };
 
     connection.ontrack = (event) => {
-      const stream = event.streams[0];
+      const stream = event.streams[0] || new MediaStream([event.track]);
       if (stream) {
         upsertConnectionDiagnostic(peerId, { hasRemoteAudioTrack: true });
         attachRemoteAudio(peerId, stream);
@@ -631,10 +654,13 @@ export function useEzcordVoice({
       );
 
     if (idleTransceiver) {
-      await idleTransceiver.sender.replaceTrack(track);
       idleTransceiver.direction = "sendrecv";
+      await idleTransceiver.sender.replaceTrack(track);
     } else {
-      connection.addTrack(track, mediaStream);
+      connection.addTransceiver(track, {
+        direction: "sendrecv",
+        streams: [mediaStream],
+      });
     }
   }
 
@@ -665,6 +691,7 @@ export function useEzcordVoice({
     }
     audio.srcObject = stream;
     appendRemoteAudio(audio);
+    watchRemoteAudioLevel(peerId, stream);
     void playRemoteAudio(audio);
   }
 
@@ -676,6 +703,7 @@ export function useEzcordVoice({
     ignoredOfferPeers.delete(peerId);
     remoteAudios.get(peerId)?.remove();
     remoteAudios.delete(peerId);
+    stopRemoteAudioLevel(peerId);
     connectionDiagnostics.value = connectionDiagnostics.value.filter(
       (item) => item.peerId !== peerId,
     );
@@ -737,6 +765,7 @@ export function useEzcordVoice({
       }
       if (peerId) {
         upsertConnectionDiagnostic(peerId, { autoplayBlocked: false });
+        void remoteAudioWatchers.get(peerId)?.audioContext.resume?.();
       }
     } catch {
       if (peerId) {
@@ -792,7 +821,83 @@ export function useEzcordVoice({
   }
 
   function handleAudioUnlock() {
+    micAudioContext?.resume?.().catch(() => {});
+    remoteAudioWatchers.forEach((watcher) => {
+      watcher.audioContext.resume?.().catch(() => {});
+    });
     void resumeRemoteAudios();
+  }
+
+  function getAudioLevel(samples: Uint8Array) {
+    const sum = samples.reduce((total, value) => total + value, 0);
+    return Math.min(100, Math.round((sum / samples.length) * 1.6));
+  }
+
+  function updateLocalSpeaking(level: number) {
+    const now = Date.now();
+    if (level > voiceActivityThreshold) {
+      localSpeakingUntil = now + voiceActivityHoldMs;
+    }
+    isLocalSpeaking.value = isMicOn.value && now <= localSpeakingUntil;
+  }
+
+  function watchRemoteAudioLevel(peerId: string, stream: MediaStream) {
+    stopRemoteAudioLevel(peerId);
+    if (!stream.getAudioTracks().length) return;
+
+    const AudioContextConstructor =
+      window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    const audioContext = new AudioContextConstructor();
+    const analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(stream);
+
+    analyser.fftSize = 256;
+    const samples = new Uint8Array(analyser.frequencyBinCount);
+    source.connect(analyser);
+    remoteAudioWatchers.set(peerId, { audioContext, frame: 0, source });
+    audioContext.resume?.().catch(() => {});
+
+    const tick = () => {
+      const watcher = remoteAudioWatchers.get(peerId);
+      if (!watcher) return;
+
+      analyser.getByteFrequencyData(samples);
+      const level = getAudioLevel(samples);
+      const now = Date.now();
+      if (level > voiceActivityThreshold) {
+        remoteSpeakingUntil.set(peerId, now + voiceActivityHoldMs);
+      }
+      setRemoteSpeaking(peerId, now <= (remoteSpeakingUntil.get(peerId) || 0));
+      watcher.frame = requestAnimationFrame(tick);
+    };
+
+    tick();
+  }
+
+  function stopRemoteAudioLevel(peerId: string) {
+    const watcher = remoteAudioWatchers.get(peerId);
+    if (watcher?.frame) {
+      cancelAnimationFrame(watcher.frame);
+    }
+    watcher?.source.disconnect();
+    watcher?.audioContext.close().catch(() => {});
+    remoteAudioWatchers.delete(peerId);
+    remoteSpeakingUntil.delete(peerId);
+    setRemoteSpeaking(peerId, false);
+  }
+
+  function setRemoteSpeaking(peerId: string, isSpeaking: boolean) {
+    const wasSpeaking = remoteSpeakingPeerIds.has(peerId);
+    if (isSpeaking === wasSpeaking) return;
+
+    if (isSpeaking) {
+      remoteSpeakingPeerIds.add(peerId);
+    } else {
+      remoteSpeakingPeerIds.delete(peerId);
+    }
+    speakingPeerIds.value = Array.from(remoteSpeakingPeerIds);
   }
 
   function upsertConnectionDiagnostic(
@@ -914,6 +1019,7 @@ export function useEzcordVoice({
     connectionDiagnostics,
     isWaiting,
     isMicOn,
+    isLocalSpeaking,
     kickPeer,
     leaveActiveRoom,
     beaconLeaveActiveRoom,
@@ -921,6 +1027,7 @@ export function useEzcordVoice({
     micLevel,
     peers,
     setAudioSink,
+    speakingPeerIds,
     startSignaling,
     toggleMic,
     waitingCount,

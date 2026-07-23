@@ -5,11 +5,13 @@ import { getInitials } from "~/utils/ezcord";
 const props = defineProps<{
   copied: boolean;
   isMicOn: boolean;
+  isLocalSpeaking: boolean;
   isWaiting: boolean;
   micLevel: number;
   peers: Peer[];
   room: Room;
   setAudioSink: (element: HTMLElement | null) => void;
+  speakingPeerIds: string[];
   userId: string;
   userInitial: string;
   userPhotoUrl: string;
@@ -39,6 +41,10 @@ function hideBrokenAvatar(event: Event) {
   image.classList.add("hidden");
   (image.nextElementSibling as HTMLElement | null)?.classList.remove("hidden");
 }
+
+function isPeerSpeaking(peerId: string) {
+  return props.speakingPeerIds.includes(peerId);
+}
 </script>
 
 <template>
@@ -55,7 +61,7 @@ function hideBrokenAvatar(event: Event) {
       <div class="w-[74px] text-center">
         <div
           class="relative mx-auto grid h-[62px] w-[62px] place-items-center rounded-full border-[3px] text-[19px] font-black"
-          :class="props.isWaiting ? 'border-dashed border-ez-widget-muted bg-ez-widget-field text-ez-widget-muted' : 'border-ez-green bg-ez-green text-[#082900] shadow-[0_0_26px_rgba(99,226,30,0.42)]'"
+          :class="props.isWaiting ? 'border-dashed border-ez-widget-muted bg-ez-widget-field text-ez-widget-muted' : props.isLocalSpeaking ? 'animate-[ez-speaking-pulse_1.05s_ease-in-out_infinite] border-ez-green bg-ez-green text-[#082900] shadow-[0_0_26px_rgba(99,226,30,0.42)]' : 'border-transparent bg-ez-green text-[#082900]'"
         >
           <img
             v-if="props.userPhotoUrl"
@@ -70,7 +76,10 @@ function hideBrokenAvatar(event: Event) {
       </div>
 
       <div v-for="peer in props.peers" :key="peer.peerId" class="w-[74px] text-center">
-        <div class="relative mx-auto grid h-[62px] w-[62px] place-items-center rounded-full border-[3px] border-ez-green bg-white/[.08] text-[19px] font-black text-white">
+        <div
+          class="relative mx-auto grid h-[62px] w-[62px] place-items-center rounded-full border-[3px] bg-white/[.08] text-[19px] font-black text-white"
+          :class="isPeerSpeaking(peer.peerId) ? 'animate-[ez-speaking-pulse_1.05s_ease-in-out_infinite] border-ez-green shadow-[0_0_24px_rgba(99,226,30,0.38)]' : 'border-transparent'"
+        >
           <img
             v-if="peer.photoUrl"
             class="h-full w-full rounded-[inherit] object-cover"
@@ -114,7 +123,7 @@ function hideBrokenAvatar(event: Event) {
       <div>
         <div class="flex items-center justify-between">
           <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">Голос</span>
-          <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">{{ props.isMicOn ? "Live" : "Muted" }}</span>
+          <span class="text-xs font-black uppercase leading-[1.2]" :class="props.isMicOn ? 'text-[#ff4d4f]' : 'text-ez-widget-muted'">{{ props.isMicOn ? "Live" : "Muted" }}</span>
         </div>
         <div class="mt-2.5 flex h-[70px] items-end justify-center gap-2 rounded-[14px] bg-ez-widget-field p-4">
           <span

@@ -67,3 +67,14 @@
     transform: scaleY(1.08);
   }
 }
+
+@keyframes ez-speaking-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgb(99 226 30 / 0.26);
+  }
+
+  50% {
+    box-shadow: 0 0 24px rgb(99 226 30 / 0.52);
+  }
+}
