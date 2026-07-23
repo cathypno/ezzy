@@ -44,8 +44,6 @@ const waveBars = [18, 30, 46, 26, 58, 74, 34, 50, 24, 62, 40, 22];
 const maxRoomParticipants = 5;
 
 const {
-  connectedPeerIds,
-  connectionDiagnostics,
   isWaiting,
   isMicOn,
   isLocalSpeaking,
@@ -69,7 +67,6 @@ const {
 });
 
 const participantCount = computed(() => peers.value.length + (isWaiting.value ? 0 : user.value ? 1 : 0));
-const connectedCount = computed(() => connectedPeerIds.value.length);
 const visibleMicOn = computed(() => isMicOn.value);
 const visibleMicLevel = computed(() => micLevel.value);
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
@@ -327,9 +324,11 @@ async function copyInvite(room: Room) {
 
   errorMessage.value = "";
   copiedRoomId.value = room.id;
-  statusMessage.value = "Ссылка приглашения скопирована";
+  const copiedMessage = "Ссылка приглашения скопирована";
+  statusMessage.value = copiedMessage;
   window.setTimeout(() => {
     if (copiedRoomId.value === room.id) copiedRoomId.value = "";
+    if (statusMessage.value === copiedMessage) statusMessage.value = "";
   }, 1600);
 }
 
@@ -517,8 +516,6 @@ useHead({
 
       <EzcordRoomScreen
         v-else
-        :connected-count="connectedCount"
-        :connection-diagnostics="connectionDiagnostics"
         :copied="copiedRoomId === activeRoom.id"
         :error-message="errorMessage"
         :is-mic-on="visibleMicOn"

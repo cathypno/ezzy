@@ -119,7 +119,7 @@ function isPeerSpeaking(peerId: string) {
       </button>
     </div>
 
-    <div class="mt-7 grid items-end gap-4 [grid-template-columns:minmax(0,1fr)_94px] max-[760px]:grid-cols-1">
+    <div class="mt-7 grid items-end gap-4 [grid-template-columns:minmax(0,1fr)_86px] max-[760px]:[grid-template-columns:minmax(0,1fr)_78px]">
       <div>
         <div class="flex items-center justify-between">
           <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">Голос</span>
@@ -136,28 +136,28 @@ function isPeerSpeaking(peerId: string) {
             }"
           />
         </div>
-        <button
-          class="mt-4 grid h-[86px] w-[86px] place-items-center rounded-full text-[19px] font-black transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-[.55] disabled:hover:translate-y-0 max-[760px]:h-[78px] max-[760px]:w-[78px]"
-          :class="props.isMicOn ? 'border border-transparent bg-ez-green text-[#082900] shadow-[0_0_38px_rgba(99,226,30,0.66)]' : 'border border-ez-widget-muted/58 bg-ez-widget-field text-ez-widget-muted'"
-          :disabled="props.isWaiting"
-          type="button"
-          :title="props.isWaiting ? 'Место освободится — вы в очереди' : 'Переключить микрофон'"
-          @click="$emit('toggle-mic')"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="1em"
-            height="1em"
-            viewBox="0 0 24 24"
-          >
-            <path d="M0 0h24v24H0z" fill="none" />
-            <path
-              fill="currentColor"
-              d="M9.875 13.125Q9 12.25 9 11V5q0-1.25.875-2.125T12 2t2.125.875T15 5v6q0 1.25-.875 2.125T12 14t-2.125-.875M11 20v-2.075q-2.3-.325-3.937-1.95t-1.988-3.95q-.05-.425.225-.725T6 11t.713.288T7.1 12q.35 1.75 1.738 2.875T12 16q1.8 0 3.175-1.137T16.9 12q.1-.425.388-.712T18 11t.7.3t.225.725q-.35 2.275-1.975 3.925T13 17.925V20q0 .425-.288.713T12 21t-.712-.288T11 20"
-            />
-          </svg>
-        </button>
       </div>
+      <button
+        class="grid h-[86px] w-[86px] place-items-center rounded-full text-[19px] font-black transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-[.55] disabled:hover:translate-y-0 max-[760px]:h-[78px] max-[760px]:w-[78px]"
+        :class="props.isMicOn ? 'border border-transparent bg-ez-green text-[#082900] shadow-[0_0_38px_rgba(99,226,30,0.66)]' : 'border border-ez-widget-muted/58 bg-ez-widget-field text-ez-widget-muted'"
+        :disabled="props.isWaiting"
+        type="button"
+        :title="props.isWaiting ? 'Место освободится — вы в очереди' : 'Переключить микрофон'"
+        @click="$emit('toggle-mic')"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="1em"
+          height="1em"
+          viewBox="0 0 24 24"
+        >
+          <path d="M0 0h24v24H0z" fill="none" />
+          <path
+            fill="currentColor"
+            d="M9.875 13.125Q9 12.25 9 11V5q0-1.25.875-2.125T12 2t2.125.875T15 5v6q0 1.25-.875 2.125T12 14t-2.125-.875M11 20v-2.075q-2.3-.325-3.937-1.95t-1.988-3.95q-.05-.425.225-.725T6 11t.713.288T7.1 12q.35 1.75 1.738 2.875T12 16q1.8 0 3.175-1.137T16.9 12q.1-.425.388-.712T18 11t.7.3t.225.725q-.35 2.275-1.975 3.925T13 17.925V20q0 .425-.288.713T12 21t-.712-.288T11 20"
+          />
+        </svg>
+      </button>
     </div>
 
     <div :ref="props.setAudioSink" class="pointer-events-none fixed left-0 top-0 h-0 w-0 overflow-hidden opacity-0"></div>

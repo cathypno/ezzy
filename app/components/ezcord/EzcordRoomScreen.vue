@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import EzcordRoomSidebar from "~/components/ezcord/EzcordRoomSidebar.vue";
 import EzcordRoomSettingsModal from "~/components/ezcord/EzcordRoomSettingsModal.vue";
 import EzcordRoomStage from "~/components/ezcord/EzcordRoomStage.vue";
-import type { Peer, Room, RoomGame, RoomGoal, VoiceConnectionDiagnostic } from "~/types/ezcord";
+import type { Peer, Room, RoomGame, RoomGoal } from "~/types/ezcord";
 
 const props = defineProps<{
-  connectedCount: number;
-  connectionDiagnostics: VoiceConnectionDiagnostic[];
   copied: boolean;
   errorMessage: string;
   isMicOn: boolean;
@@ -37,13 +34,27 @@ const emit = defineEmits<{
 }>();
 
 const settingsOpen = ref(false);
-const hasSidebarContent = computed(
-  () =>
-    props.isWaiting ||
-    props.connectionDiagnostics.length > 0 ||
-    Boolean(props.errorMessage) ||
-    Boolean(props.statusMessage),
-);
+const roomToasts = computed(() => {
+  const toasts: { id: string; tone: "error" | "info" | "success"; text: string }[] = [];
+
+  if (props.errorMessage) {
+    toasts.push({ id: "error", tone: "error", text: props.errorMessage });
+  }
+  if (props.statusMessage) {
+    toasts.push({ id: "status", tone: "success", text: props.statusMessage });
+  }
+  if (props.isWaiting) {
+    toasts.push({
+      id: "waiting",
+      tone: "info",
+      text: props.waitingCount
+        ? `Вы в ожидании свободного места. Перед вами: ${props.waitingCount}`
+        : "Вы в ожидании свободного места",
+    });
+  }
+
+  return toasts;
+});
 
 const gameLabels: Record<RoomGame, string> = {
   voicechat: "Войсчат",
@@ -92,10 +103,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
       </button>
     </div>
 
-    <div
-      class="mt-5 grid gap-4"
-      :class="hasSidebarContent ? '[grid-template-columns:minmax(0,1fr)_minmax(190px,220px)] max-[900px]:grid-cols-1' : 'grid-cols-1'"
-    >
+    <div class="mt-5">
       <EzcordRoomStage
         :copied="props.copied"
         :is-mic-on="props.isMicOn"
@@ -114,13 +122,23 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         @kick="$emit('kick', $event)"
         @toggle-mic="$emit('toggle-mic')"
       />
-      <EzcordRoomSidebar
-        v-if="hasSidebarContent"
-        :error-message="props.errorMessage"
-        :connection-diagnostics="props.connectionDiagnostics"
-        :is-waiting="props.isWaiting"
-        :status-message="props.statusMessage"
-      />
+    </div>
+
+    <div
+      v-if="roomToasts.length"
+      class="pointer-events-none fixed inset-x-0 bottom-[max(16px,env(safe-area-inset-bottom))] z-40 flex justify-center px-4"
+      aria-live="polite"
+    >
+      <div class="grid w-full max-w-[420px] gap-2.5">
+        <p
+          v-for="toast in roomToasts"
+          :key="toast.id"
+          class="pointer-events-auto rounded-[16px] border px-4 py-3 text-[13px] font-extrabold leading-[1.35] shadow-[0_18px_44px_-24px_rgba(0,0,0,0.95)] backdrop-blur-[18px]"
+          :class="toast.tone === 'error' ? 'border-[#e5484d]/40 bg-[#261012]/92 text-[#ff9aa2]' : toast.tone === 'info' ? 'border-ez-blue/35 bg-[#0f1b25]/92 text-ez-blue' : 'border-ez-green/35 bg-[#10220c]/92 text-ez-green-dark'"
+        >
+          {{ toast.text }}
+        </p>
+      </div>
     </div>
 
     <EzcordRoomSettingsModal
