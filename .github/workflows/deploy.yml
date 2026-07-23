@@ -66,8 +66,13 @@ jobs:
         run: |
           tar -cf /tmp/ezcord-deploy.tar \
             app/components/EzcordLogo.vue \
+            app/components/ezcord \
             app/assets/css/main.css \
             app/pages/ezcord.vue \
+            app/pages/index.vue \
+            app/composables \
+            app/types \
+            app/utils \
             server/api/ezcord \
             server/utils/ezcord.ts \
             server/utils/ezcordRealtime.ts \
