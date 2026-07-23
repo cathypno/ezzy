@@ -142,11 +142,7 @@ async function submitAuth() {
 
     user.value = response.user;
     statusMessage.value = authMode.value === "register" ? "Аккаунт создан" : "Вы вошли";
-    await fetchRooms();
-
-    if (roomFromQuery.value) {
-      await openRoom(roomFromQuery.value, inviteFromQuery.value);
-    }
+    await enterStartRoom();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось войти";
   } finally {
@@ -265,6 +261,43 @@ async function createRoom() {
   }
 }
 
+async function enterStartRoom() {
+  if (!user.value) return;
+
+  if (roomFromQuery.value) {
+    await openRoom(roomFromQuery.value, inviteFromQuery.value);
+    return;
+  }
+
+  await openHomeRoom();
+}
+
+async function openHomeRoom() {
+  if (!user.value) return;
+
+  errorMessage.value = "";
+  statusMessage.value = "";
+  isLoading.value = true;
+
+  await leaveActiveRoom();
+  cleanupVoice();
+  isLeavingRoom = false;
+
+  try {
+    const response = await $fetch<{ room: Room }>("/api/ezcord/rooms/home");
+    rooms.value = [response.room, ...rooms.value.filter((room) => room.id !== response.room.id)];
+    activeRoom.value = response.room;
+    voiceReady.value = true;
+    startSignaling();
+    await nextTick();
+    scrollToAppTop();
+  } catch (error: any) {
+    errorMessage.value = error?.data?.message || "Не получилось открыть комнату";
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 async function openRoom(roomId: string, invite = "") {
   errorMessage.value = "";
   statusMessage.value = "";
@@ -290,12 +323,12 @@ async function exitRoom() {
   activeRoom.value = null;
   cleanupVoice();
   await nextTick();
-  scrollToAppTop();
+  await openHomeRoom();
 }
 
 async function copyInvite(room: Room) {
   if (!room.inviteUrl) {
-    errorMessage.value = "Invite ссылка недоступна";
+    errorMessage.value = "Ссылка приглашения недоступна";
     return;
   }
 
@@ -308,7 +341,7 @@ async function copyInvite(room: Room) {
   }
 
   copiedRoomId.value = room.id;
-  statusMessage.value = "Invite ссылка скопирована";
+  statusMessage.value = "Ссылка приглашения скопирована";
   window.setTimeout(() => {
     if (copiedRoomId.value === room.id) copiedRoomId.value = "";
   }, 1600);
@@ -916,10 +949,7 @@ onMounted(async () => {
     }
     if (user.value) {
       accountDisplayName.value = user.value.displayName;
-      await fetchRooms();
-    }
-    if (user.value && roomFromQuery.value) {
-      await openRoom(roomFromQuery.value, inviteFromQuery.value);
+      await enterStartRoom();
     }
   } finally {
     isBooting.value = false;
@@ -943,7 +973,7 @@ useHead({
   <main class="ez-main" :data-theme="theme">
     <header class="ez-topbar">
       <div class="ez-topbar__inner">
-        <button class="ez-brand" type="button" @click="activeRoom ? exitRoom() : undefined">
+        <button class="ez-brand" type="button" @click="user ? openHomeRoom() : undefined">
           <span class="ez-brand__logo" aria-hidden="true">
             <EzcordLogo class="ez-brand__logo-icon" />
           </span>
@@ -957,7 +987,6 @@ useHead({
           <button class="ez-icon-btn" type="button" :aria-label="themeLabel" :title="themeLabel" @click="toggleTheme">
             {{ theme === "light" ? "☾" : "☀" }}
           </button>
-          <button v-if="user && activeRoom" class="ez-nav-btn" type="button" @click="exitRoom">Лобби</button>
           <button v-if="user" class="ez-user-pill" type="button" title="Выйти" @click="logout">
             <span class="ez-user-name">{{ user.displayName }}</span>
             <span class="ez-avatar">{{ userInitial }}</span>
@@ -1063,127 +1092,14 @@ useHead({
         </section>
       </div>
 
-      <div v-else-if="!activeRoom" class="ez-shell ez-lobby-shell">
-        <aside class="ez-stack">
-          <section class="ez-panel ez-panel--soft">
-            <div class="ez-panel-head">
-              <div>
-                <p class="ez-kicker">Создание</p>
-                <h1 class="ez-heading">Новая комната</h1>
-              </div>
-              <span class="ez-plus-tile">+</span>
-            </div>
-
-            <form class="ez-form" @submit.prevent="createRoom">
-              <label class="ez-field">
-                <span class="ez-label">Название</span>
-                <input v-model="roomName" class="ez-input" type="text" />
-              </label>
-
-              <label class="ez-field">
-                <span class="ez-label">Доступ</span>
-                <select v-model="roomAccess" class="ez-select">
-                  <option value="public">Открытая</option>
-                  <option value="private">Приватная</option>
-                  <option value="telegram_chat">Только Telegram-чат</option>
-                </select>
-              </label>
-
-              <label v-if="roomAccess === 'telegram_chat'" class="ez-field">
-                <span class="ez-label">Telegram chat id</span>
-                <input v-model="telegramChatId" class="ez-input" placeholder="-100..." type="text" />
-              </label>
-
-              <button class="ez-primary" :disabled="isLoading" type="submit">Создать</button>
-            </form>
-          </section>
-
-          <section class="ez-panel">
-            <div class="ez-panel-head">
-              <div class="min-w-0">
-                <p class="ez-kicker">Аккаунт</p>
-                <p class="ez-account-line">{{ hasEmail ? user.email : "Вход через Telegram" }}</p>
-                <p class="ez-copy">{{ telegramName || "Telegram не привязан" }}</p>
-              </div>
-              <button v-if="!user.telegram" class="ez-secondary" type="button" @click="linkTelegram">TG</button>
-            </div>
-          </section>
-
-          <section v-if="!hasEmail" class="ez-panel">
-            <p class="ez-kicker">Email для входа</p>
-            <p class="ez-copy">Привяжите почту, чтобы входить без Telegram.</p>
-            <form class="ez-form" @submit.prevent="attachEmailAccount">
-              <input v-model="accountDisplayName" class="ez-input" autocomplete="name" placeholder="Имя" type="text" />
-              <input v-model="accountEmail" class="ez-input" autocomplete="email" placeholder="you@mail.com" type="email" />
-              <input v-model="accountPassword" class="ez-input" autocomplete="new-password" placeholder="Пароль от 8 символов" type="password" />
-              <button class="ez-primary" :disabled="isLoading" type="submit">Привязать email</button>
-            </form>
-          </section>
-
+      <div v-else-if="!activeRoom" class="ez-room-shell ez-room-shell--pending">
+        <section class="ez-panel ez-panel--soft ez-room-pending">
+          <p class="ez-kicker">Комната</p>
+          <h1 class="ez-heading">Готовим комнату</h1>
+          <p class="ez-copy">Откроем комнату из ссылки или вашу пустую комнату.</p>
+          <button class="ez-primary" :disabled="isLoading" type="button" @click="openHomeRoom">Открыть свою комнату</button>
           <p v-if="errorMessage" class="ez-alert ez-alert--error">{{ errorMessage }}</p>
           <p v-if="statusMessage" class="ez-alert ez-alert--status">{{ statusMessage }}</p>
-        </aside>
-
-        <section>
-          <div class="ez-panel-head">
-            <div>
-              <p class="ez-kicker">Комнаты</p>
-              <h1 class="ez-page-title"><span class="ez-page-title__accent">Лобби</span></h1>
-            </div>
-            <span class="ez-pill"><span class="ez-dot"></span>до {{ maxRoomParticipants }}</span>
-          </div>
-
-          <div class="ez-feature-grid">
-            <article class="ez-feature-card">
-              <span class="ez-feature-icon">PUB</span>
-              <h2>{{ publicRoomCount }}</h2>
-              <p>Открытые</p>
-            </article>
-            <article class="ez-feature-card">
-              <span class="ez-feature-icon">INV</span>
-              <h2>{{ privateRoomCount }}</h2>
-              <p>Приватные</p>
-            </article>
-            <article class="ez-feature-card">
-              <span class="ez-feature-icon">TG</span>
-              <h2>{{ telegramRoomCount }}</h2>
-              <p>Telegram-чаты</p>
-            </article>
-          </div>
-
-          <div class="ez-room-list">
-            <article v-for="room in rooms" :key="room.id" class="ez-room-card">
-              <div class="ez-room-card-row">
-                <div class="min-w-0">
-                  <div class="ez-room-tags">
-                    <span class="ez-badge">{{ accessGlyphs[room.access] }}</span>
-                    <span class="ez-badge ez-badge--muted">{{ accessLabels[room.access] }}</span>
-                  </div>
-                  <h2 class="ez-room-title">{{ room.name }}</h2>
-                  <p class="ez-room-subtitle">Голосовая комната</p>
-                </div>
-                <span class="ez-card-count"><span class="ez-dot"></span>{{ maxRoomParticipants }} max</span>
-              </div>
-
-              <div class="ez-room-actions">
-                <button v-if="room.inviteUrl" class="ez-secondary" type="button" @click="copyInvite(room)">
-                  {{ copiedRoomId === room.id ? "Скопировано" : "Invite" }}
-                </button>
-                <div class="ez-wave ez-wave--small">
-                  <span
-                    v-for="height in waveBars.slice(0, 7)"
-                    :key="height"
-                    :style="{ height: `${Math.max(10, Math.round(height * 0.34))}px` }"
-                  ></span>
-                </div>
-                <button class="ez-primary" type="button" @click="openRoom(room.id)">Войти</button>
-              </div>
-            </article>
-
-            <div v-if="rooms.length === 0" class="ez-empty">
-              <p class="ez-heading">Комнат пока нет</p>
-            </div>
-          </div>
         </section>
       </div>
 
@@ -1221,8 +1137,8 @@ useHead({
                 class="ez-circle-btn"
                 :class="{ 'ez-circle-btn--copied': copiedRoomId === activeRoom.id }"
                 type="button"
-                :aria-label="copiedRoomId === activeRoom.id ? 'Invite ссылка скопирована' : 'Скопировать invite ссылку'"
-                :title="copiedRoomId === activeRoom.id ? 'Скопировано' : 'Скопировать invite'"
+                :aria-label="copiedRoomId === activeRoom.id ? 'Ссылка приглашения скопирована' : 'Скопировать ссылку приглашения'"
+                :title="copiedRoomId === activeRoom.id ? 'Скопировано' : 'Скопировать приглашение'"
                 @click="copyInvite(activeRoom)"
               >
                 {{ copiedRoomId === activeRoom.id ? "✓" : "+" }}
@@ -1260,9 +1176,8 @@ useHead({
               <p class="ez-stat-value">{{ connectedCount }}</p>
             </div>
             <button v-if="activeRoom.inviteUrl" class="ez-secondary" type="button" @click="copyInvite(activeRoom)">
-              {{ copiedRoomId === activeRoom.id ? "Скопировано" : "Invite" }}
+              {{ copiedRoomId === activeRoom.id ? "Скопировано" : "Пригласить" }}
             </button>
-            <button class="ez-secondary" type="button" @click="exitRoom">Выйти в лобби</button>
             <p v-if="errorMessage" class="ez-alert ez-alert--error">{{ errorMessage }}</p>
             <p v-if="statusMessage" class="ez-alert ez-alert--status">{{ statusMessage }}</p>
           </aside>

@@ -485,6 +485,42 @@ export async function createEzcordRoom(params: {
   return room;
 }
 
+export async function getOrCreateEzcordHomeRoom(user: EzcordUser): Promise<EzcordRoom> {
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const existing = await pool.query(
+      `select *
+         from ezcord_rooms
+        where closed_at is null
+          and created_by = $1
+          and access = 'public'
+          and telegram_chat_id is null
+        order by created_at desc
+        limit 1`,
+      [user.id],
+    );
+
+    if (existing.rows[0]) {
+      return rowToRoom(existing.rows[0]);
+    }
+  } else {
+    const data = readEzcordData();
+    const existing = data.rooms
+      .filter((room) => !room.closedAt && room.createdBy === user.id && room.access === "public" && !room.telegramChatId)
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0];
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  return await createEzcordRoom({
+    name: user.displayName.trim() || "Моя комната",
+    access: "public",
+    createdBy: user.id,
+  });
+}
+
 export async function listEzcordRooms(user?: EzcordUser | null): Promise<EzcordRoom[]> {
   if (usePostgresStore()) {
     const pool = await getPgPool();
