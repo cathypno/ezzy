@@ -7,12 +7,14 @@ const DATA_FILE = "ezcord.json";
 export const EZCORD_SESSION_COOKIE = "ezcord_session";
 const SIGNAL_TTL_SECONDS = 60;
 const TELEGRAM_EMAIL_DOMAIN = "telegram.ezcord.local";
+const TELEGRAM_LOGIN_TTL_SECONDS = 5 * 60;
 
 export const EZCORD_MAX_ROOM_PARTICIPANTS = 5;
 
 export type EzcordRoomAccess = "public" | "private" | "telegram_chat";
 export type EzcordRoomGame = "voicechat" | "cs2" | "dota2" | "brawl_stars";
 export type EzcordRoomGoal = "result" | "communication";
+export type EzcordTelegramLoginStatus = "pending" | "approved" | "consumed" | "expired";
 
 export interface EzcordUser {
   id: string;
@@ -91,6 +93,17 @@ export interface EzcordKickedPeer {
   kickedAt: string;
 }
 
+export interface EzcordTelegramLoginRequest {
+  id: string;
+  status: EzcordTelegramLoginStatus;
+  telegramId?: number;
+  userId?: string;
+  createdAt: string;
+  expiresAt: string;
+  confirmedAt?: string;
+  consumedAt?: string;
+}
+
 interface EzcordData {
   users: EzcordUser[];
   sessions: EzcordSession[];
@@ -99,6 +112,7 @@ interface EzcordData {
   waitingPeers: EzcordWaitingPeer[];
   signals: EzcordSignal[];
   kickedPeers: EzcordKickedPeer[];
+  telegramLoginRequests: EzcordTelegramLoginRequest[];
 }
 
 export interface EzcordPublicUser {
@@ -108,13 +122,15 @@ export interface EzcordPublicUser {
   telegram?: EzcordTelegramIdentity;
 }
 
-interface TelegramWebAppUser {
+export interface EzcordTelegramUserPayload {
   id: number;
   first_name?: string;
   last_name?: string;
   username?: string;
   photo_url?: string;
 }
+
+type TelegramWebAppUser = EzcordTelegramUserPayload;
 
 let pgPoolPromise: Promise<any> | null = null;
 let pgSchemaPromise: Promise<void> | null = null;
@@ -125,7 +141,16 @@ const telegramChatLocks = new Map<string, Promise<void>>();
 export function readEzcordData(): EzcordData {
   const path = getEzcordDataPath();
   if (!existsSync(path)) {
-    const initial: EzcordData = { users: [], sessions: [], rooms: [], peers: [], waitingPeers: [], signals: [], kickedPeers: [] };
+    const initial: EzcordData = {
+      users: [],
+      sessions: [],
+      rooms: [],
+      peers: [],
+      waitingPeers: [],
+      signals: [],
+      kickedPeers: [],
+      telegramLoginRequests: [],
+    };
     writeEzcordData(initial);
     return initial;
   }
@@ -143,6 +168,7 @@ export function readEzcordData(): EzcordData {
     waitingPeers: data.waitingPeers || [],
     signals: data.signals || [],
     kickedPeers: data.kickedPeers || [],
+    telegramLoginRequests: data.telegramLoginRequests || [],
   };
 }
 
@@ -194,6 +220,155 @@ export async function getEzcordUserBySessionId(sessionId: string): Promise<Ezcor
   const session = data.sessions.find((item) => item.id === sessionId);
   if (!session) return null;
   return data.users.find((user) => user.id === session.userId) || null;
+}
+
+export async function getEzcordUserById(userId: string): Promise<EzcordUser | null> {
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const result = await pool.query("select * from ezcord_users where id = $1", [userId]);
+    return result.rows[0] ? rowToUser(result.rows[0]) : null;
+  }
+
+  const data = readEzcordData();
+  return data.users.find((user) => user.id === userId) || null;
+}
+
+export async function createTelegramLoginRequest(): Promise<EzcordTelegramLoginRequest> {
+  const now = Date.now();
+  const request: EzcordTelegramLoginRequest = {
+    id: randomId("tglogin"),
+    status: "pending",
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + TELEGRAM_LOGIN_TTL_SECONDS * 1000).toISOString(),
+  };
+
+  if (useRedisStore()) {
+    const redis = await getRedis();
+    await redis.set(telegramLoginRequestKey(request.id), JSON.stringify(request), "EX", TELEGRAM_LOGIN_TTL_SECONDS);
+    return request;
+  }
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    await pool.query(
+      `insert into ezcord_telegram_login_requests (id, status, created_at, expires_at)
+       values ($1, $2, $3, $4)`,
+      [request.id, request.status, request.createdAt, request.expiresAt],
+    );
+    return request;
+  }
+
+  const data = readEzcordData();
+  data.telegramLoginRequests = data.telegramLoginRequests
+    .filter((item) => new Date(item.expiresAt).getTime() > now - 24 * 60 * 60 * 1000)
+    .concat(request);
+  writeEzcordData(data);
+  return request;
+}
+
+export async function getTelegramLoginRequest(requestId: string): Promise<EzcordTelegramLoginRequest | null> {
+  let request: EzcordTelegramLoginRequest | null = null;
+
+  if (useRedisStore()) {
+    const redis = await getRedis();
+    const raw = await redis.get(telegramLoginRequestKey(requestId));
+    request = raw ? (JSON.parse(raw) as EzcordTelegramLoginRequest) : null;
+  } else if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const result = await pool.query("select * from ezcord_telegram_login_requests where id = $1", [requestId]);
+    request = result.rows[0] ? rowToTelegramLoginRequest(result.rows[0]) : null;
+  } else {
+    const data = readEzcordData();
+    request = data.telegramLoginRequests.find((item) => item.id === requestId) || null;
+  }
+
+  if (request && request.status === "pending" && new Date(request.expiresAt).getTime() <= Date.now()) {
+    request.status = "expired";
+    await saveTelegramLoginRequest(request);
+  }
+
+  return request;
+}
+
+export async function bindTelegramLoginRequest(requestId: string, telegramId: number): Promise<void> {
+  const request = await getTelegramLoginRequest(requestId);
+  if (!request) {
+    throw createError({ statusCode: 404, message: "Запрос авторизации не найден" });
+  }
+  if (request.status !== "pending") {
+    throw createError({ statusCode: 410, message: "Запрос авторизации уже недействителен" });
+  }
+  if (request.telegramId && request.telegramId !== telegramId) {
+    throw createError({ statusCode: 403, message: "Запрос создан для другого Telegram-аккаунта" });
+  }
+
+  request.telegramId = telegramId;
+  await saveTelegramLoginRequest(request);
+}
+
+export async function approveTelegramLoginRequest(
+  requestId: string,
+  telegramUser: EzcordTelegramUserPayload,
+): Promise<EzcordUser> {
+  const request = await getTelegramLoginRequest(requestId);
+  if (!request) {
+    throw createError({ statusCode: 404, message: "Запрос авторизации не найден" });
+  }
+  if (request.status !== "pending") {
+    throw createError({ statusCode: 410, message: "Запрос авторизации уже недействителен" });
+  }
+  if (request.telegramId && request.telegramId !== telegramUser.id) {
+    throw createError({ statusCode: 403, message: "Подтвердить может только тот Telegram, который открыл запрос" });
+  }
+
+  const user = await getOrCreateEzcordTelegramUserFromPayload(telegramUser);
+  request.telegramId = telegramUser.id;
+  request.userId = user.id;
+  request.status = "approved";
+  request.confirmedAt = new Date().toISOString();
+  await saveTelegramLoginRequest(request);
+  return user;
+}
+
+export async function consumeTelegramLoginRequest(requestId: string): Promise<string | null> {
+  const request = await getTelegramLoginRequest(requestId);
+  if (!request || request.status !== "approved" || !request.userId) return null;
+
+  request.status = "consumed";
+  request.consumedAt = new Date().toISOString();
+  await saveTelegramLoginRequest(request);
+  return request.userId;
+}
+
+async function saveTelegramLoginRequest(request: EzcordTelegramLoginRequest): Promise<void> {
+  if (useRedisStore()) {
+    const redis = await getRedis();
+    const ttl = ["consumed", "expired"].includes(request.status)
+      ? 60
+      : Math.max(1, Math.ceil((new Date(request.expiresAt).getTime() - Date.now()) / 1000));
+    await redis.set(telegramLoginRequestKey(request.id), JSON.stringify(request), "EX", ttl);
+    return;
+  }
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    await pool.query(
+      `update ezcord_telegram_login_requests
+          set status = $2,
+              telegram_id = $3,
+              user_id = $4,
+              confirmed_at = $5,
+              consumed_at = $6
+        where id = $1`,
+      [request.id, request.status, request.telegramId, request.userId, request.confirmedAt, request.consumedAt],
+    );
+    return;
+  }
+
+  const data = readEzcordData();
+  const index = data.telegramLoginRequests.findIndex((item) => item.id === request.id);
+  if (index >= 0) data.telegramLoginRequests[index] = request;
+  writeEzcordData(data);
 }
 
 export async function createEzcordSession(event: H3Event, userId: string): Promise<void> {
@@ -305,7 +480,11 @@ export async function findEzcordUserByCredentials(email: string, password: strin
 
 export async function getOrCreateEzcordTelegramUser(initData: string): Promise<EzcordUser> {
   const webAppUser = verifyTelegramInitData(initData);
-  const identity = telegramIdentityFromWebAppUser(webAppUser);
+  return await getOrCreateEzcordTelegramUserFromPayload(webAppUser);
+}
+
+export async function getOrCreateEzcordTelegramUserFromPayload(telegramUser: EzcordTelegramUserPayload): Promise<EzcordUser> {
+  const identity = telegramIdentityFromWebAppUser(telegramUser);
   const displayName = telegramDisplayName(identity);
   const existingUser = await findEzcordUserByTelegramId(identity.id);
 
@@ -954,24 +1133,30 @@ export async function getEzcordMetrics(): Promise<Record<string, any>> {
 
 export async function sendTelegramMessage(chatId: number | string, text: string, launchUrl?: string): Promise<number | null> {
   const webAppUrl = launchUrl || getEzcordEnv("EZCORD_WEBAPP_URL") || "https://rocketseven.ru/ezcord";
-
-  return await withTelegramChatLock(String(chatId), async () => {
-    const replyMarkup = {
-      inline_keyboard: [
-        [
-          {
-            text: "Открыть Ezcord",
-            web_app: { url: webAppUrl },
-          },
-        ],
-        [
-          {
-            text: "Открыть ссылкой",
-            url: webAppUrl,
-          },
-        ],
+  return await sendTelegramControlMessage(chatId, text, {
+    inline_keyboard: [
+      [
+        {
+          text: "Открыть Ezcord",
+          web_app: { url: webAppUrl },
+        },
       ],
-    };
+      [
+        {
+          text: "Открыть ссылкой",
+          url: webAppUrl,
+        },
+      ],
+    ],
+  });
+}
+
+export async function sendTelegramControlMessage(
+  chatId: number | string,
+  text: string,
+  replyMarkup: Record<string, any>,
+): Promise<number | null> {
+  return await withTelegramChatLock(String(chatId), async () => {
     const previousMessageId = await getTelegramControlMessageId(String(chatId));
     let messageId = previousMessageId;
 
@@ -1007,6 +1192,13 @@ export async function sendTelegramMessage(chatId: number | string, text: string,
     }
 
     return messageId;
+  });
+}
+
+export async function answerTelegramCallbackQuery(queryId: string, text?: string): Promise<void> {
+  await callTelegramApi("answerCallbackQuery", {
+    callback_query_id: queryId,
+    ...(text ? { text } : {}),
   });
 }
 
@@ -1078,6 +1270,10 @@ async function setTelegramControlMessageId(chatId: string, messageId: number): P
 
 function telegramControlKey(chatId: string): string {
   return `ezcord:telegram:control:${chatId}`;
+}
+
+function telegramLoginRequestKey(requestId: string): string {
+  return `ezcord:telegram:login:${requestId}`;
 }
 
 export function randomId(prefix: string): string {
@@ -1172,6 +1368,17 @@ async function ensurePgSchema(pool: any): Promise<void> {
         created_at timestamptz not null
       );
 
+      create table if not exists ezcord_telegram_login_requests (
+        id text primary key,
+        status text not null,
+        telegram_id bigint,
+        user_id text references ezcord_users(id) on delete set null,
+        created_at timestamptz not null,
+        expires_at timestamptz not null,
+        confirmed_at timestamptz,
+        consumed_at timestamptz
+      );
+
       create table if not exists ezcord_rooms (
         id text primary key,
         name text not null,
@@ -1199,6 +1406,7 @@ async function ensurePgSchema(pool: any): Promise<void> {
       create index if not exists ezcord_rooms_created_by_idx on ezcord_rooms(created_by);
       create index if not exists ezcord_rooms_access_idx on ezcord_rooms(access);
       create index if not exists ezcord_sessions_user_id_idx on ezcord_sessions(user_id);
+      create index if not exists ezcord_telegram_login_requests_expires_idx on ezcord_telegram_login_requests(expires_at);
     `);
 
     await migrateJsonToPostgres(pool);
@@ -1292,6 +1500,19 @@ function rowToUser(row: any): EzcordUser {
   };
 }
 
+function rowToTelegramLoginRequest(row: any): EzcordTelegramLoginRequest {
+  return {
+    id: row.id,
+    status: row.status,
+    telegramId: row.telegram_id == null ? undefined : Number(row.telegram_id),
+    userId: row.user_id || undefined,
+    createdAt: toIso(row.created_at),
+    expiresAt: toIso(row.expires_at),
+    confirmedAt: row.confirmed_at ? toIso(row.confirmed_at) : undefined,
+    consumedAt: row.consumed_at ? toIso(row.consumed_at) : undefined,
+  };
+}
+
 function rowToRoom(row: any): EzcordRoom {
   return {
     id: row.id,
@@ -1338,7 +1559,7 @@ async function updateEzcordUserTelegram(userId: string, identity: EzcordTelegram
               telegram_username = $2,
               telegram_first_name = $3,
               telegram_last_name = $4,
-              telegram_photo_url = $5,
+              telegram_photo_url = coalesce($5, telegram_photo_url),
               telegram_linked_at = $6,
               display_name = case
                 when email like $7 then $8
@@ -1370,7 +1591,10 @@ async function updateEzcordUserTelegram(userId: string, identity: EzcordTelegram
     throw createError({ statusCode: 404, message: "Пользователь не найден" });
   }
 
-  user.telegram = identity;
+  user.telegram = {
+    ...identity,
+    photoUrl: identity.photoUrl || user.telegram?.photoUrl,
+  };
   if (isSyntheticTelegramEmail(user.email)) {
     user.displayName = displayName;
   }
@@ -1498,6 +1722,25 @@ function getEzcordBotToken(): string {
     throw createError({ statusCode: 500, message: "EZCORD_BOT_TOKEN не настроен" });
   }
   return token;
+}
+
+let telegramBotUsernamePromise: Promise<string> | null = null;
+
+export async function getTelegramBotUsername(): Promise<string> {
+  const configured = getEzcordEnv("EZCORD_BOT_USERNAME").replace(/^@/, "");
+  if (configured) return configured;
+
+  if (!telegramBotUsernamePromise) {
+    telegramBotUsernamePromise = callTelegramApi("getMe", {}).then((bot) => {
+      const username = String(bot?.username || "").replace(/^@/, "");
+      if (!username) {
+        throw createError({ statusCode: 500, message: "Не удалось определить username Telegram-бота" });
+      }
+      return username;
+    });
+  }
+
+  return await telegramBotUsernamePromise;
 }
 
 function verifyTelegramInitData(initData: string): TelegramWebAppUser {

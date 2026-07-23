@@ -520,6 +520,21 @@ button {
   text-align: center;
 }
 
+.ez-telegram-login {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.ez-auth-link {
+  display: block;
+  color: var(--ez-blue);
+  text-decoration: none;
+}
+
+.ez-auth-link:hover {
+  text-decoration: underline;
+}
+
 .ez-hero {
   min-width: 0;
 }

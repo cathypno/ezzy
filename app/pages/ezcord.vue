@@ -22,6 +22,10 @@ const isBooting = ref(true);
 const copiedRoomId = ref("");
 const theme = ref<"light" | "dark">("light");
 const isRoomSettingsSaving = ref(false);
+const isTelegramLoginLoading = ref(false);
+const telegramLoginUrl = ref("");
+let telegramLoginTimer = 0;
+let telegramLoginPollInFlight = false;
 
 const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : ""));
 const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : ""));
@@ -107,11 +111,78 @@ async function authenticateTelegram() {
 }
 
 async function logout() {
+  stopTelegramLoginPolling();
   await leaveActiveRoom();
   cleanupVoice();
   await $fetch("/api/ezcord/auth/logout", { method: "POST" });
   user.value = null;
   activeRoom.value = null;
+}
+
+async function startTelegramLogin() {
+  if (isTelegramLoginLoading.value) return;
+
+  errorMessage.value = "";
+  statusMessage.value = "Откройте Telegram и подтвердите вход кнопкой в сообщении бота";
+  isTelegramLoginLoading.value = true;
+  telegramLoginUrl.value = "";
+
+  const telegramWindow = window.open("about:blank", "_blank");
+
+  try {
+    const response = await $fetch<{ requestId: string; botUrl: string }>("/api/ezcord/auth/telegram/request", {
+      method: "POST",
+    });
+    telegramLoginUrl.value = response.botUrl;
+    telegramWindow?.location.assign(response.botUrl);
+    telegramLoginTimer = window.setInterval(() => void pollTelegramLogin(response.requestId), 1500);
+    await pollTelegramLogin(response.requestId);
+  } catch (error: any) {
+    telegramWindow?.close();
+    stopTelegramLoginPolling();
+    isTelegramLoginLoading.value = false;
+    errorMessage.value = error?.data?.message || "Не получилось начать вход через Telegram";
+  }
+}
+
+async function pollTelegramLogin(requestId: string) {
+  if (!isTelegramLoginLoading.value || telegramLoginPollInFlight) return;
+  telegramLoginPollInFlight = true;
+
+  try {
+    const response = await $fetch<{ status: "pending" | "approved" | "consumed" | "expired"; user?: User }>(
+      `/api/ezcord/auth/telegram/${encodeURIComponent(requestId)}`,
+    );
+
+    if (response.status === "approved" && response.user) {
+      stopTelegramLoginPolling();
+      isTelegramLoginLoading.value = false;
+      telegramLoginUrl.value = "";
+      user.value = response.user;
+      statusMessage.value = "Вы вошли через Telegram";
+      await enterStartRoom();
+      return;
+    }
+
+    if (response.status === "expired" || response.status === "consumed") {
+      stopTelegramLoginPolling();
+      isTelegramLoginLoading.value = false;
+      statusMessage.value = "Запрос авторизации истек, начните вход еще раз";
+    }
+  } catch (error: any) {
+    stopTelegramLoginPolling();
+    isTelegramLoginLoading.value = false;
+    errorMessage.value = error?.data?.message || "Не получилось проверить вход через Telegram";
+  } finally {
+    telegramLoginPollInFlight = false;
+  }
+}
+
+function stopTelegramLoginPolling() {
+  if (telegramLoginTimer) {
+    window.clearInterval(telegramLoginTimer);
+    telegramLoginTimer = 0;
+  }
 }
 
 function toggleTheme() {
@@ -286,6 +357,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  stopTelegramLoginPolling();
   window.removeEventListener("pagehide", beaconLeaveActiveRoom);
   beaconLeaveActiveRoom();
   cleanupVoice();
@@ -324,7 +396,10 @@ useHead({
         :error-message="errorMessage"
         :is-loading="isLoading"
         :status-message="statusMessage"
+        :telegram-login-loading="isTelegramLoginLoading"
+        :telegram-login-url="telegramLoginUrl"
         @submit="submitAuth"
+        @telegram-login="startTelegramLogin"
       />
 
       <div v-else-if="!activeRoom" class="ez-room-shell ez-room-shell--pending">

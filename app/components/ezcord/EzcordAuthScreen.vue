@@ -7,6 +7,8 @@ const props = defineProps<{
   isLoading: boolean;
   password: string;
   statusMessage: string;
+  telegramLoginLoading: boolean;
+  telegramLoginUrl: string;
 }>();
 
 const emit = defineEmits<{
@@ -15,6 +17,7 @@ const emit = defineEmits<{
   "update:email": [value: string];
   "update:password": [value: string];
   submit: [];
+  "telegram-login": [];
 }>();
 </script>
 
@@ -82,7 +85,24 @@ const emit = defineEmits<{
         </button>
       </form>
 
-      <p class="ez-auth-note">В Telegram Mini App вход выполнится автоматически</p>
+      <button
+        class="ez-secondary ez-telegram-login"
+        :disabled="props.telegramLoginLoading"
+        type="button"
+        @click="emit('telegram-login')"
+      >
+        {{ props.telegramLoginLoading ? "Ждем подтверждение..." : "Войти через Telegram" }}
+      </button>
+      <a
+        v-if="props.telegramLoginUrl"
+        class="ez-auth-note ez-auth-link"
+        :href="props.telegramLoginUrl"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Открыть Telegram-бота
+      </a>
+      <p class="ez-auth-note">Подтвердите вход кнопкой в Telegram-боте</p>
       <p v-if="props.errorMessage" class="ez-alert ez-alert--error">{{ props.errorMessage }}</p>
       <p v-if="props.statusMessage" class="ez-alert ez-alert--status">{{ props.statusMessage }}</p>
     </div>
