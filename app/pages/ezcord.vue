@@ -452,7 +452,7 @@ useHead({
 
 <template>
   <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
-    <EzcordHeader :user="user" @logout="logout" />
+    <EzcordHeader :user="user" />
 
     <div class="min-h-[calc(100vh-74px)]">
       <div v-if="isBooting" class="flex min-h-[calc(100vh-74px)] items-center justify-center p-6">

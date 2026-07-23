@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import type { Room, VoiceConnectionDiagnostic } from "~/types/ezcord";
+import type { VoiceConnectionDiagnostic } from "~/types/ezcord";
 
 const props = defineProps<{
   connectionDiagnostics: VoiceConnectionDiagnostic[];
   errorMessage: string;
   isWaiting: boolean;
-  maxRoomParticipants: number;
-  participantCount: number;
-  room: Room;
   statusMessage: string;
-  waitingCount: number;
 }>();
 
 function formatDiagnosticState(value: string) {
@@ -19,15 +15,6 @@ function formatDiagnosticState(value: string) {
 
 <template>
   <aside class="grid min-w-0 content-start gap-[18px] max-[900px]:grid-cols-2 max-[760px]:grid-cols-1">
-    <div class="rounded-[18px] border border-ez-green/28 bg-ez-green-soft p-[18px] shadow-ez">
-      <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Участники</p>
-      <p class="mt-3 text-[38px] font-black leading-none text-ez-ink">
-        {{ props.participantCount }}/{{ props.maxRoomParticipants }}
-      </p>
-      <p v-if="props.waitingCount" class="mt-2.5 text-[13px] font-black text-ez-green-dark">
-        В ожидании: {{ props.waitingCount }}
-      </p>
-    </div>
     <p v-if="props.isWaiting" class="rounded-[18px] border border-ez-blue/35 bg-ez-blue-soft px-4 py-3.5 text-[13px] font-extrabold text-ez-blue">
       Вы в ожидании свободного места
     </p>

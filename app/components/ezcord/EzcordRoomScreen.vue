@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import EzcordRoomSidebar from "~/components/ezcord/EzcordRoomSidebar.vue";
 import EzcordRoomSettingsModal from "~/components/ezcord/EzcordRoomSettingsModal.vue";
 import EzcordRoomStage from "~/components/ezcord/EzcordRoomStage.vue";
@@ -37,6 +37,13 @@ const emit = defineEmits<{
 }>();
 
 const settingsOpen = ref(false);
+const hasSidebarContent = computed(
+  () =>
+    props.isWaiting ||
+    props.connectionDiagnostics.length > 0 ||
+    Boolean(props.errorMessage) ||
+    Boolean(props.statusMessage),
+);
 
 const gameLabels: Record<RoomGame, string> = {
   voicechat: "Войсчат",
@@ -69,6 +76,8 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         <div class="mt-2.5 flex flex-wrap gap-2" aria-label="Параметры комнаты">
           <span class="inline-flex min-h-7 items-center rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">Игра: {{ gameLabels[props.room.game] }}</span>
           <span class="inline-flex min-h-7 items-center rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">Цель: {{ goalLabels[props.room.goal] }}</span>
+          <span class="inline-flex min-h-7 items-center rounded-full border border-ez-green/35 bg-ez-green-soft px-2.5 text-xs font-extrabold text-ez-green-dark">Участники: {{ props.participantCount }}/{{ props.maxRoomParticipants }}</span>
+          <span v-if="props.waitingCount" class="inline-flex min-h-7 items-center rounded-full border border-ez-blue/35 bg-ez-blue-soft px-2.5 text-xs font-extrabold text-ez-blue">Ожидание: {{ props.waitingCount }}</span>
         </div>
       </div>
       <button
@@ -83,7 +92,10 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
       </button>
     </div>
 
-    <div class="mt-5 grid gap-4 [grid-template-columns:minmax(0,1fr)_minmax(190px,220px)] max-[900px]:grid-cols-1">
+    <div
+      class="mt-5 grid gap-4"
+      :class="hasSidebarContent ? '[grid-template-columns:minmax(0,1fr)_minmax(190px,220px)] max-[900px]:grid-cols-1' : 'grid-cols-1'"
+    >
       <EzcordRoomStage
         :copied="props.copied"
         :is-mic-on="props.isMicOn"
@@ -103,14 +115,11 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         @toggle-mic="$emit('toggle-mic')"
       />
       <EzcordRoomSidebar
+        v-if="hasSidebarContent"
         :error-message="props.errorMessage"
         :connection-diagnostics="props.connectionDiagnostics"
         :is-waiting="props.isWaiting"
-        :max-room-participants="props.maxRoomParticipants"
-        :participant-count="props.participantCount"
-        :room="props.room"
         :status-message="props.statusMessage"
-        :waiting-count="props.waitingCount"
       />
     </div>
 
