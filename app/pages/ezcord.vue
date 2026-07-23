@@ -8,6 +8,7 @@ import type { Room, User } from "~/types/ezcord";
 import { getInitials } from "~/utils/ezcord";
 
 const route = useRoute();
+const runtimeConfig = useRuntimeConfig();
 
 const user = ref<User | null>(null);
 const activeRoom = ref<Room | null>(null);
@@ -24,10 +25,40 @@ const theme = ref<"light" | "dark">("light");
 
 const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : ""));
 const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : ""));
+const isUiMode = computed(() => runtimeConfig.public.ezcordUiMode === "mock");
 const waveBars = [18, 30, 46, 26, 58, 74, 34, 50, 24, 62, 40, 22];
 const maxRoomParticipants = 5;
 
+const mockUser: User = {
+  id: "ui-user",
+  email: "ui@ezcord.local",
+  displayName: "cathypno",
+  telegram: {
+    id: 100000001,
+    username: "cathypno",
+    firstName: "Cathy",
+  },
+};
+
+const mockRoom: Room = {
+  id: "ui-room",
+  name: "Вечерний подкаст",
+  access: "public",
+  inviteUrl: "http://localhost:3100/ezcord?room=ui-room&invite=ui-demo",
+  createdBy: mockUser.id,
+};
+
+const mockPeers = [
+  { peerId: "ui-peer-1", userId: "ui-user-2", displayName: "Марина", lastSeenAt: new Date().toISOString() },
+  { peerId: "ui-peer-2", userId: "ui-user-3", displayName: "Алексей", lastSeenAt: new Date().toISOString() },
+];
+const mockMicOn = ref(false);
+const mockMicLevel = ref(68);
+
 const participantCount = computed(() => peers.value.length + (user.value ? 1 : 0));
+const connectedCount = computed(() => (isUiMode.value ? peers.value.length : connectedPeerIds.value.length));
+const visibleMicOn = computed(() => (isUiMode.value ? mockMicOn.value : isMicOn.value));
+const visibleMicLevel = computed(() => (isUiMode.value ? mockMicLevel.value : micLevel.value));
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
 const themeLabel = computed(() => (theme.value === "light" ? "Включить темную тему" : "Включить светлую тему"));
 
@@ -100,6 +131,13 @@ async function authenticateTelegram() {
 }
 
 async function logout() {
+  if (isUiMode.value) {
+    user.value = null;
+    activeRoom.value = null;
+    peers.value = [];
+    return;
+  }
+
   await leaveActiveRoom();
   cleanupVoice();
   await $fetch("/api/ezcord/auth/logout", { method: "POST" });
@@ -115,6 +153,11 @@ function toggleTheme() {
 async function enterStartRoom() {
   if (!user.value) return;
 
+  if (isUiMode.value) {
+    openMockRoom();
+    return;
+  }
+
   if (roomFromQuery.value) {
     await openRoom(roomFromQuery.value, inviteFromQuery.value);
     return;
@@ -125,6 +168,11 @@ async function enterStartRoom() {
 
 async function openHomeRoom() {
   if (!user.value) return;
+
+  if (isUiMode.value) {
+    openMockRoom();
+    return;
+  }
 
   errorMessage.value = "";
   statusMessage.value = "";
@@ -146,6 +194,11 @@ async function openHomeRoom() {
 }
 
 async function openRoom(roomId: string, invite = "") {
+  if (isUiMode.value) {
+    openMockRoom(roomId);
+    return;
+  }
+
   errorMessage.value = "";
   statusMessage.value = "";
   await leaveActiveRoom();
@@ -160,6 +213,36 @@ async function openRoom(roomId: string, invite = "") {
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Нет доступа к комнате";
   }
+}
+
+function openMockRoom(roomId = mockRoom.id) {
+  activeRoom.value = { ...mockRoom, id: roomId };
+  user.value = { ...mockUser };
+  peers.value = mockPeers.map((peer) => ({ ...peer }));
+  mockMicOn.value = false;
+  statusMessage.value = "UI-режим: данные тестовые";
+  errorMessage.value = "";
+  scrollToAppTop();
+}
+
+function handleToggleMic() {
+  if (!isUiMode.value) {
+    void toggleMic();
+    return;
+  }
+
+  mockMicOn.value = !mockMicOn.value;
+  statusMessage.value = mockMicOn.value ? "Микрофон включен" : "Микрофон выключен";
+}
+
+function handleKickPeer(peerId: string) {
+  if (!isUiMode.value) {
+    void kickPeer(peerId);
+    return;
+  }
+
+  peers.value = peers.value.filter((peer) => peer.peerId !== peerId);
+  statusMessage.value = "Участник удален из тестовой комнаты";
 }
 
 async function copyInvite(room: Room) {
@@ -230,6 +313,16 @@ function scrollToAppTop() {
 }
 
 onMounted(async () => {
+  if (isUiMode.value) {
+    const savedTheme = window.localStorage.getItem("ezcord-theme");
+    if (savedTheme === "light" || savedTheme === "dark") {
+      theme.value = savedTheme;
+    }
+    openMockRoom();
+    isBooting.value = false;
+    return;
+  }
+
   prepareTelegramApp();
   const savedTheme = window.localStorage.getItem("ezcord-theme");
   if (savedTheme === "light" || savedTheme === "dark") {
@@ -259,7 +352,7 @@ onBeforeUnmount(() => {
 useHead({
   title: "Ezcord",
   meta: [{ name: "robots", content: "noindex,nofollow" }],
-  script: [{ src: "https://telegram.org/js/telegram-web-app.js?63" }],
+  script: isUiMode.value ? [] : [{ src: "https://telegram.org/js/telegram-web-app.js?63" }],
 });
 </script>
 
@@ -304,12 +397,12 @@ useHead({
 
       <EzcordRoomScreen
         v-else
-        :connected-count="connectedPeerIds.length"
+        :connected-count="connectedCount"
         :copied="copiedRoomId === activeRoom.id"
         :error-message="errorMessage"
-        :is-mic-on="isMicOn"
+        :is-mic-on="visibleMicOn"
         :max-room-participants="maxRoomParticipants"
-        :mic-level="micLevel"
+        :mic-level="visibleMicLevel"
         :participant-count="participantCount"
         :peers="peers"
         :room="activeRoom"
@@ -319,8 +412,8 @@ useHead({
         :user-initial="userInitial"
         :wave-bars="waveBars"
         @invite="copyInvite(activeRoom)"
-        @kick="kickPeer"
-        @toggle-mic="toggleMic"
+        @kick="handleKickPeer"
+        @toggle-mic="handleToggleMic"
       />
     </div>
   </main>
