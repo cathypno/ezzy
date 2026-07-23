@@ -2,8 +2,6 @@
 import type { Room } from "~/types/ezcord";
 
 const props = defineProps<{
-  connectedCount: number;
-  copied: boolean;
   errorMessage: string;
   isWaiting: boolean;
   maxRoomParticipants: number;
@@ -11,10 +9,6 @@ const props = defineProps<{
   room: Room;
   statusMessage: string;
   waitingCount: number;
-}>();
-
-defineEmits<{
-  invite: [];
 }>();
 </script>
 
@@ -29,14 +23,6 @@ defineEmits<{
         В ожидании: {{ props.waitingCount }}
       </p>
     </div>
-    <button
-      v-if="props.room.inviteUrl"
-      class="inline-flex min-h-[50px] items-center justify-center rounded-[14px] border border-ez-line bg-ez-card px-[18px] text-[15px] font-black text-ez-ink shadow-ez transition hover:-translate-y-px disabled:cursor-default disabled:opacity-[.58] disabled:hover:translate-y-0"
-      type="button"
-      @click="$emit('invite')"
-    >
-      {{ props.copied ? "Скопировано" : "Пригласить" }}
-    </button>
     <p v-if="props.isWaiting" class="rounded-[18px] border border-ez-blue/35 bg-ez-blue-soft px-4 py-3.5 text-[13px] font-extrabold text-ez-blue">
       Вы в ожидании свободного места
     </p>

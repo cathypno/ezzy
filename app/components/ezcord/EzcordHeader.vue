@@ -13,7 +13,7 @@ defineEmits<{
 
 <template>
   <header class="sticky top-0 z-20 border-b border-ez-line bg-[#0b0e0b]/90 backdrop-blur-[18px]">
-    <div class="mx-auto flex min-h-[74px] max-w-[1200px] items-center justify-between gap-4 px-6 py-3 max-[760px]:min-h-[68px] max-[760px]:px-3.5">
+    <div class="flex min-h-[74px] items-center justify-between gap-4 px-[clamp(16px,2.55vw,52px)] py-3 max-[760px]:min-h-[68px] max-[760px]:px-3.5">
       <div class="flex min-w-0 items-center gap-3" aria-label="Ezcord">
         <span class="grid h-12 w-12 shrink-0 place-items-center text-ez-green max-[760px]:h-[42px] max-[760px]:w-[42px]" aria-hidden="true">
           <EzcordLogo class="h-12 w-12 scale-x-[-1] max-[760px]:h-[42px] max-[760px]:w-[42px]" />

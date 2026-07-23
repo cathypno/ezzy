@@ -58,7 +58,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1320px] px-[clamp(16px,3vw,36px)] pb-[42px] pt-7 max-[760px]:px-3.5">
+  <div class="px-[clamp(16px,2.55vw,52px)] pb-[42px] pt-7 max-[760px]:px-3.5">
     <div class="flex items-start justify-between gap-[18px]">
       <div>
         <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Комната</p>
@@ -98,8 +98,6 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         @toggle-mic="$emit('toggle-mic')"
       />
       <EzcordRoomSidebar
-        :connected-count="props.connectedCount"
-        :copied="props.copied"
         :error-message="props.errorMessage"
         :is-waiting="props.isWaiting"
         :max-room-participants="props.maxRoomParticipants"
@@ -107,7 +105,6 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         :room="props.room"
         :status-message="props.statusMessage"
         :waiting-count="props.waitingCount"
-        @invite="$emit('invite')"
       />
     </div>
 
