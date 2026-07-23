@@ -121,16 +121,12 @@ button {
   width: 48px;
   flex-shrink: 0;
   place-items: center;
-  border: 1px solid rgba(127, 148, 184, 0.2);
-  border-radius: 15px;
-  background: linear-gradient(180deg, #111722, #07090e);
-  color: #8fb7ff;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+  color: var(--ez-green);
 }
 
 .ez-brand__logo-icon {
-  height: 28px;
-  width: 28px;
+  height: 48px;
+  width: 48px;
   transform: scaleX(-1);
 }
 
@@ -1249,12 +1245,11 @@ button {
   .ez-brand__logo {
     height: 42px;
     width: 42px;
-    border-radius: 13px;
   }
 
   .ez-brand__logo-icon {
-    height: 25px;
-    width: 25px;
+    height: 42px;
+    width: 42px;
   }
 
   .ez-brand__title {
