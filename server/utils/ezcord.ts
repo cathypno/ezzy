@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { setDefaultResultOrder } from "node:dns";
 import { join } from "node:path";
 import { createError, deleteCookie, getCookie, getHeader, getQuery, getRouterParam, setCookie, type H3Event } from "h3";
+
+setDefaultResultOrder("ipv4first");
 
 const DATA_FILE = "ezcord.json";
 export const EZCORD_SESSION_COOKIE = "ezcord_session";
@@ -1215,11 +1218,16 @@ export async function deleteTelegramMessage(chatId: number | string, messageId: 
 
 async function callTelegramApi(method: string, body: Record<string, any>): Promise<any> {
   const token = getEzcordBotToken();
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw createError({ statusCode: 502, message: "Сервер не может подключиться к Telegram API" });
+  }
   const payload = await response.json().catch(() => null);
 
   if (!response.ok || !payload?.ok) {
