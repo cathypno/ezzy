@@ -69,7 +69,7 @@ Set `EZCORD_BOT_TOKEN`, `EZCORD_WEBAPP_URL`, `EZCORD_BOT_USERNAME` and optionall
 
 On the website, `Войти через Telegram` creates a short-lived one-time link. The bot sends one confirmation message with an `Авторизоваться` button; after the click, the website receives a session for the same Telegram account.
 
-Room invites use Main Mini App deep links with `startapp`. Configure `https://rocketseven.ru/ezcord` as the Main Mini App for `@ezcord_bot` in `@BotFather`, then use `EZCORD_BOT_USERNAME=ezcord_bot`. A room invite opens the Mini App directly in that room; `startapp` is passed to the app as `start_param`.
+Room invites use Telegram bot deep links with `start`. The bot keeps one control message and replaces it with a `Войти в комнату` Mini App button containing the room URL and invite code. This is the reliable fallback for clients where a Main Mini App deep link stays on Telegram's loading screen. The Main Mini App remains configured for the bot profile and regular launch.
 
 The webhook endpoint is:
 

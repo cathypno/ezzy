@@ -3,7 +3,7 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { setDefaultResultOrder } from "node:dns";
 import { join } from "node:path";
 import { createError, deleteCookie, getCookie, getHeader, getQuery, getRouterParam, setCookie, type H3Event } from "h3";
-import { encodeEzcordRoomLaunch } from "#shared/ezcord-launch";
+import { encodeEzcordRoomBotStart } from "#shared/ezcord-launch";
 
 setDefaultResultOrder("ipv4first");
 
@@ -819,8 +819,8 @@ export async function roomInviteUrl(room: EzcordRoom): Promise<string> {
   const botUsername = configuredBotUsername || (await getTelegramBotUsername().catch(() => ""));
 
   if (botUsername) {
-    const payload = encodeEzcordRoomLaunch(room.id, room.inviteCode);
-    return `https://t.me/${botUsername}?startapp=${encodeURIComponent(payload)}`;
+    const payload = encodeEzcordRoomBotStart(room.id, room.inviteCode);
+    return `https://t.me/${botUsername}?start=${encodeURIComponent(payload)}`;
   }
 
   const query = new URLSearchParams({ room: room.id });

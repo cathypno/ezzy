@@ -7,6 +7,7 @@ import {
   sendTelegramControlMessage,
   sendTelegramMessage,
 } from "../../../utils/ezcord";
+import { decodeEzcordRoomBotStart } from "#shared/ezcord-launch";
 
 export default defineEventHandler(async (event) => {
   const expectedSecret = getEzcordEnv("EZCORD_WEBHOOK_SECRET");
@@ -111,6 +112,23 @@ export default defineEventHandler(async (event) => {
   }
 
   const baseWebAppUrl = getEzcordEnv("EZCORD_WEBAPP_URL") || "https://rocketseven.ru/ezcord";
+  if (startPayload.startsWith("ezroom_")) {
+    const roomLaunch = decodeEzcordRoomBotStart(startPayload);
+    if (!roomLaunch) {
+      await sendTelegramControlMessage(chatId, "Ezcord\nСсылка на комнату повреждена или устарела.", { inline_keyboard: [] });
+      return { ok: true };
+    }
+
+    const roomUrl = new URL(baseWebAppUrl);
+    roomUrl.searchParams.set("room", roomLaunch.roomId);
+    if (roomLaunch.inviteCode) roomUrl.searchParams.set("invite", roomLaunch.inviteCode);
+
+    await sendTelegramControlMessage(chatId, "Ezcord\nВас пригласили в голосовую комнату.", {
+      inline_keyboard: [[{ text: "Войти в комнату", web_app: { url: roomUrl.toString() } }]],
+    });
+    return { ok: true };
+  }
+
   const launchUrl = ["group", "supergroup"].includes(chatType)
     ? `${baseWebAppUrl}?chat_id=${encodeURIComponent(String(chatId))}`
     : baseWebAppUrl;
