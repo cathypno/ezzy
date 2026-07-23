@@ -37,6 +37,11 @@ export default defineEventHandler(async (event) => {
     createdBy: user.id,
     telegramChatId: body.telegramChatId,
   });
+  const rewardedUser = await awardEzcordRoomHostPoints(room, user);
 
-  return { ok: true, room: { ...room, inviteUrl: await roomInviteUrl(room) } };
+  return {
+    ok: true,
+    room: { ...room, inviteUrl: await roomInviteUrl(room) },
+    user: publicEzcordUser(rewardedUser),
+  };
 });

@@ -28,6 +28,8 @@ const telegramRoomId = ref("");
 const telegramInviteCode = ref("");
 let telegramLoginTimer = 0;
 let telegramLoginPollInFlight = false;
+let rewardsTimer = 0;
+let rewardsTickInFlight = false;
 
 const roomFromQuery = computed(() => {
   const roomId = typeof route.query.room === "string" ? route.query.room.trim() : "";
@@ -97,6 +99,7 @@ async function submitAuth() {
     user.value = response.user;
     statusMessage.value = authMode.value === "register" ? "Аккаунт создан" : "Вы вошли";
     await enterStartRoom();
+    startRewardsTimer();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось войти";
   } finally {
@@ -123,6 +126,7 @@ async function authenticateTelegram() {
 
 async function logout() {
   stopTelegramLoginPolling();
+  stopRewardsTimer();
   await leaveActiveRoom();
   cleanupVoice();
   await $fetch("/api/ezcord/auth/logout", { method: "POST" });
@@ -172,6 +176,7 @@ async function pollTelegramLogin(requestId: string) {
       user.value = response.user;
       statusMessage.value = "Вы вошли через Telegram";
       await enterStartRoom();
+      startRewardsTimer();
       return;
     }
 
@@ -193,6 +198,35 @@ function stopTelegramLoginPolling() {
   if (telegramLoginTimer) {
     window.clearInterval(telegramLoginTimer);
     telegramLoginTimer = 0;
+  }
+}
+
+function startRewardsTimer() {
+  if (rewardsTimer || !user.value) return;
+  void tickRewards();
+  rewardsTimer = window.setInterval(() => void tickRewards(), 60_000);
+}
+
+function stopRewardsTimer() {
+  if (rewardsTimer) {
+    window.clearInterval(rewardsTimer);
+    rewardsTimer = 0;
+  }
+}
+
+async function tickRewards() {
+  if (!user.value || rewardsTickInFlight) return;
+  rewardsTickInFlight = true;
+
+  try {
+    const response = await $fetch<{ user: User }>("/api/ezcord/rewards/tick", {
+      method: "POST",
+    });
+    user.value = response.user;
+  } catch {
+    // Rewards are cosmetic; voice room flow should keep working if this ping fails.
+  } finally {
+    rewardsTickInFlight = false;
   }
 }
 
@@ -218,7 +252,8 @@ async function openHomeRoom() {
   cleanupVoice();
 
   try {
-    const response = await $fetch<{ room: Room }>("/api/ezcord/rooms/home");
+    const response = await $fetch<{ room: Room; user?: User }>("/api/ezcord/rooms/home");
+    if (response.user) user.value = response.user;
     activeRoom.value = response.room;
     startSignaling();
     scrollToAppTop();
@@ -238,7 +273,8 @@ async function openRoom(roomId: string, invite = "") {
 
   try {
     const query = invite ? `?invite=${encodeURIComponent(invite)}` : "";
-    const response = await $fetch<{ room: Room }>(`/api/ezcord/rooms/${roomId}${query}`);
+    const response = await $fetch<{ room: Room; user?: User }>(`/api/ezcord/rooms/${roomId}${query}`);
+    if (response.user) user.value = response.user;
     activeRoom.value = response.room;
     startSignaling();
     scrollToAppTop();
@@ -392,6 +428,7 @@ onMounted(async () => {
     }
     if (user.value) {
       await enterStartRoom();
+      startRewardsTimer();
     }
   } finally {
     isBooting.value = false;
@@ -400,6 +437,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopTelegramLoginPolling();
+  stopRewardsTimer();
   window.removeEventListener("pagehide", beaconLeaveActiveRoom);
   beaconLeaveActiveRoom();
   cleanupVoice();
@@ -414,7 +452,7 @@ useHead({
 
 <template>
   <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
-    <EzcordHeader :user="user" :user-initial="userInitial" @logout="logout" />
+    <EzcordHeader :user="user" @logout="logout" />
 
     <div class="min-h-[calc(100vh-74px)]">
       <div v-if="isBooting" class="flex min-h-[calc(100vh-74px)] items-center justify-center p-6">

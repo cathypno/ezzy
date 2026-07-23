@@ -13,6 +13,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: "Нет доступа к комнате" });
   }
 
+  const rewardedUser = await awardEzcordRoomHostPoints(room, user);
+
   return {
     room: {
       ...room,
@@ -22,5 +24,6 @@ export default defineEventHandler(async (event) => {
       provider: "webrtc-mesh",
       ready: true,
     },
+    user: publicEzcordUser(rewardedUser),
   };
 });

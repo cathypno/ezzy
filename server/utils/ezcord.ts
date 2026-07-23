@@ -12,6 +12,10 @@ export const EZCORD_SESSION_COOKIE = "ezcord_session";
 const SIGNAL_TTL_SECONDS = 60;
 const TELEGRAM_EMAIL_DOMAIN = "telegram.ezcord.local";
 const TELEGRAM_LOGIN_TTL_SECONDS = 5 * 60;
+const HOST_ROOM_REWARD_POINTS = 10;
+const ACTIVITY_REWARD_POINTS = 5;
+const ACTIVITY_REWARD_INTERVAL_MS = 15 * 60 * 1000;
+const ACTIVITY_REWARD_RESET_GAP_MS = 3 * 60 * 1000;
 
 export const EZCORD_MAX_ROOM_PARTICIPANTS = 5;
 
@@ -25,7 +29,10 @@ export interface EzcordUser {
   email: string;
   passwordHash: string;
   displayName: string;
+  points: number;
   createdAt: string;
+  activityRewardLastSeenAt?: string;
+  activityRewardLastAwardedAt?: string;
   telegram?: EzcordTelegramIdentity;
 }
 
@@ -108,6 +115,15 @@ export interface EzcordTelegramLoginRequest {
   consumedAt?: string;
 }
 
+export interface EzcordPointEvent {
+  id: string;
+  userId: string;
+  kind: string;
+  dedupeKey: string;
+  points: number;
+  createdAt: string;
+}
+
 interface EzcordData {
   users: EzcordUser[];
   sessions: EzcordSession[];
@@ -117,12 +133,14 @@ interface EzcordData {
   signals: EzcordSignal[];
   kickedPeers: EzcordKickedPeer[];
   telegramLoginRequests: EzcordTelegramLoginRequest[];
+  pointEvents: EzcordPointEvent[];
 }
 
 export interface EzcordPublicUser {
   id: string;
   email: string;
   displayName: string;
+  points: number;
   telegram?: EzcordTelegramIdentity;
 }
 
@@ -154,6 +172,7 @@ export function readEzcordData(): EzcordData {
       signals: [],
       kickedPeers: [],
       telegramLoginRequests: [],
+      pointEvents: [],
     };
     writeEzcordData(initial);
     return initial;
@@ -161,7 +180,10 @@ export function readEzcordData(): EzcordData {
 
   const data = JSON.parse(readFileSync(path, "utf-8")) as Partial<EzcordData>;
   return {
-    users: data.users || [],
+    users: (data.users || []).map((user) => ({
+      ...user,
+      points: user.points || 0,
+    })),
     sessions: data.sessions || [],
     rooms: (data.rooms || []).map((room) => ({
       ...room,
@@ -173,6 +195,7 @@ export function readEzcordData(): EzcordData {
     signals: data.signals || [],
     kickedPeers: data.kickedPeers || [],
     telegramLoginRequests: data.telegramLoginRequests || [],
+    pointEvents: data.pointEvents || [],
   };
 }
 
@@ -189,6 +212,7 @@ export function publicEzcordUser(user: EzcordUser): EzcordPublicUser {
     id: user.id,
     email: isSyntheticTelegramEmail(user.email) ? "" : user.email,
     displayName: user.displayName,
+    points: user.points || 0,
     telegram: user.telegram,
   };
 }
@@ -442,6 +466,7 @@ export async function createEzcordUser(email: string, password: string, displayN
     email: normalizedEmail,
     passwordHash: hashPassword(password),
     displayName: displayName.trim() || normalizedEmail.split("@")[0],
+    points: 0,
     createdAt: new Date().toISOString(),
   };
 
@@ -501,6 +526,7 @@ export async function getOrCreateEzcordTelegramUserFromPayload(telegramUser: Ezc
     email: syntheticTelegramEmail(identity.id),
     passwordHash: hashPassword(randomId("telegram")),
     displayName,
+    points: 0,
     createdAt: new Date().toISOString(),
     telegram: identity,
   };
@@ -644,6 +670,58 @@ export async function linkTelegramToEzcordUser(userId: string, initData: string)
   user.telegram = identity;
   writeEzcordData(data);
   return identity;
+}
+
+export async function awardEzcordRoomHostPoints(room: EzcordRoom, user: EzcordUser): Promise<EzcordUser> {
+  if (room.createdBy !== user.id) return user;
+  return (await awardEzcordPointsOnce(user.id, HOST_ROOM_REWARD_POINTS, "host_room", room.id)) || user;
+}
+
+export async function touchEzcordActivityReward(userId: string): Promise<EzcordUser> {
+  const now = new Date();
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const current = await client.query("select * from ezcord_users where id = $1 for update", [userId]);
+      if (current.rowCount === 0) {
+        throw createError({ statusCode: 404, message: "Пользователь не найден" });
+      }
+
+      const reward = calculateActivityReward(rowToUser(current.rows[0]), now);
+      const updated = await client.query(
+        `update ezcord_users
+            set points = points + $1,
+                activity_reward_last_seen_at = $2,
+                activity_reward_last_awarded_at = $3
+          where id = $4
+        returning *`,
+        [reward.points, reward.lastSeenAt, reward.lastAwardedAt, userId],
+      );
+      await client.query("commit");
+      return rowToUser(updated.rows[0]);
+    } catch (error) {
+      await client.query("rollback").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  const data = readEzcordData();
+  const user = data.users.find((item) => item.id === userId);
+  if (!user) {
+    throw createError({ statusCode: 404, message: "Пользователь не найден" });
+  }
+
+  const reward = calculateActivityReward(user, now);
+  user.points = (user.points || 0) + reward.points;
+  user.activityRewardLastSeenAt = reward.lastSeenAt;
+  user.activityRewardLastAwardedAt = reward.lastAwardedAt;
+  writeEzcordData(data);
+  return user;
 }
 
 export async function canAccessRoom(user: EzcordUser, room: EzcordRoom, inviteCode?: string): Promise<boolean> {
@@ -1360,13 +1438,26 @@ async function ensurePgSchema(pool: any): Promise<void> {
         email text not null unique,
         password_hash text not null,
         display_name text not null,
+        points integer not null default 0,
         created_at timestamptz not null,
+        activity_reward_last_seen_at timestamptz,
+        activity_reward_last_awarded_at timestamptz,
         telegram_id bigint unique,
         telegram_username text,
         telegram_first_name text,
         telegram_last_name text,
         telegram_photo_url text,
         telegram_linked_at timestamptz
+      );
+
+      create table if not exists ezcord_point_events (
+        id text primary key,
+        user_id text not null references ezcord_users(id) on delete cascade,
+        kind text not null,
+        dedupe_key text not null,
+        points integer not null,
+        created_at timestamptz not null,
+        unique (user_id, kind, dedupe_key)
       );
 
       create table if not exists ezcord_sessions (
@@ -1399,6 +1490,9 @@ async function ensurePgSchema(pool: any): Promise<void> {
         closed_at timestamptz
       );
 
+      alter table ezcord_users add column if not exists points integer not null default 0;
+      alter table ezcord_users add column if not exists activity_reward_last_seen_at timestamptz;
+      alter table ezcord_users add column if not exists activity_reward_last_awarded_at timestamptz;
       alter table ezcord_rooms add column if not exists game text not null default 'voicechat';
       alter table ezcord_rooms add column if not exists goal text not null default 'communication';
 
@@ -1414,6 +1508,7 @@ async function ensurePgSchema(pool: any): Promise<void> {
       create index if not exists ezcord_rooms_access_idx on ezcord_rooms(access);
       create index if not exists ezcord_sessions_user_id_idx on ezcord_sessions(user_id);
       create index if not exists ezcord_telegram_login_requests_expires_idx on ezcord_telegram_login_requests(expires_at);
+      create index if not exists ezcord_point_events_user_id_idx on ezcord_point_events(user_id);
     `);
 
     await migrateJsonToPostgres(pool);
@@ -1432,15 +1527,18 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
     for (const user of data.users) {
       await pool.query(
         `insert into ezcord_users
-          (id, email, password_hash, display_name, created_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          (id, email, password_hash, display_name, points, created_at, activity_reward_last_seen_at, activity_reward_last_awarded_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          on conflict (id) do nothing`,
         [
           user.id,
           user.email,
           user.passwordHash,
           user.displayName,
+          user.points || 0,
           user.createdAt,
+          user.activityRewardLastSeenAt,
+          user.activityRewardLastAwardedAt,
           user.telegram?.id,
           user.telegram?.username,
           user.telegram?.firstName,
@@ -1502,7 +1600,10 @@ function rowToUser(row: any): EzcordUser {
     email: row.email,
     passwordHash: row.password_hash,
     displayName: row.display_name,
+    points: Number(row.points || 0),
     createdAt: toIso(row.created_at),
+    activityRewardLastSeenAt: row.activity_reward_last_seen_at ? toIso(row.activity_reward_last_seen_at) : undefined,
+    activityRewardLastAwardedAt: row.activity_reward_last_awarded_at ? toIso(row.activity_reward_last_awarded_at) : undefined,
     telegram,
   };
 }
@@ -1607,6 +1708,87 @@ async function updateEzcordUserTelegram(userId: string, identity: EzcordTelegram
   }
   writeEzcordData(data);
   return user;
+}
+
+async function awardEzcordPointsOnce(userId: string, points: number, kind: string, dedupeKey: string): Promise<EzcordUser | null> {
+  const now = new Date().toISOString();
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const inserted = await client.query(
+        `insert into ezcord_point_events (id, user_id, kind, dedupe_key, points, created_at)
+         values ($1, $2, $3, $4, $5, $6)
+         on conflict (user_id, kind, dedupe_key) do nothing
+         returning id`,
+        [randomId("points"), userId, kind, dedupeKey, points, now],
+      );
+
+      const result =
+        inserted.rowCount > 0
+          ? await client.query("update ezcord_users set points = points + $1 where id = $2 returning *", [points, userId])
+          : await client.query("select * from ezcord_users where id = $1", [userId]);
+
+      await client.query("commit");
+      return result.rows[0] ? rowToUser(result.rows[0]) : null;
+    } catch (error) {
+      await client.query("rollback").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  const data = readEzcordData();
+  const user = data.users.find((item) => item.id === userId);
+  if (!user) return null;
+
+  const exists = data.pointEvents.some((event) => event.userId === userId && event.kind === kind && event.dedupeKey === dedupeKey);
+  if (!exists) {
+    data.pointEvents.push({
+      id: randomId("points"),
+      userId,
+      kind,
+      dedupeKey,
+      points,
+      createdAt: now,
+    });
+    user.points = (user.points || 0) + points;
+    writeEzcordData(data);
+  }
+  return user;
+}
+
+function calculateActivityReward(user: EzcordUser, now: Date): { points: number; lastSeenAt: string; lastAwardedAt: string } {
+  const nowTime = now.getTime();
+  const lastSeenTime = user.activityRewardLastSeenAt ? new Date(user.activityRewardLastSeenAt).getTime() : 0;
+  const lastAwardedTime = user.activityRewardLastAwardedAt ? new Date(user.activityRewardLastAwardedAt).getTime() : 0;
+  const lastSeenAt = now.toISOString();
+
+  if (!lastSeenTime || !lastAwardedTime || nowTime - lastSeenTime > ACTIVITY_REWARD_RESET_GAP_MS || nowTime <= lastAwardedTime) {
+    return {
+      points: 0,
+      lastSeenAt,
+      lastAwardedAt: lastSeenAt,
+    };
+  }
+
+  const intervals = Math.floor((nowTime - lastAwardedTime) / ACTIVITY_REWARD_INTERVAL_MS);
+  if (intervals <= 0) {
+    return {
+      points: 0,
+      lastSeenAt,
+      lastAwardedAt: user.activityRewardLastAwardedAt || lastSeenAt,
+    };
+  }
+
+  return {
+    points: intervals * ACTIVITY_REWARD_POINTS,
+    lastSeenAt,
+    lastAwardedAt: new Date(lastAwardedTime + intervals * ACTIVITY_REWARD_INTERVAL_MS).toISOString(),
+  };
 }
 
 async function isUserKickedFromRoom(roomId: string, userId: string): Promise<boolean> {
