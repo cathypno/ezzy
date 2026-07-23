@@ -6,6 +6,7 @@ import EzcordRoomScreen from "~/components/ezcord/EzcordRoomScreen.vue";
 import { useEzcordVoice } from "~/composables/useEzcordVoice";
 import type { Room, RoomGame, RoomGoal, User } from "~/types/ezcord";
 import { getInitials } from "~/utils/ezcord";
+import { decodeEzcordRoomLaunch } from "#shared/ezcord-launch";
 
 const route = useRoute();
 
@@ -28,8 +29,15 @@ const telegramInviteCode = ref("");
 let telegramLoginTimer = 0;
 let telegramLoginPollInFlight = false;
 
-const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : telegramRoomId.value));
-const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : telegramInviteCode.value));
+const roomFromQuery = computed(() => {
+  const roomId = typeof route.query.room === "string" ? route.query.room.trim() : "";
+  return roomId || telegramRoomId.value;
+});
+const inviteFromQuery = computed(() => {
+  const inviteCode = typeof route.query.invite === "string" ? route.query.invite.trim() : "";
+  return inviteCode || telegramInviteCode.value;
+});
+const hasRequestedRoom = computed(() => Boolean(roomFromQuery.value));
 const waveBars = [18, 30, 46, 26, 58, 74, 34, 50, 24, 62, 40, 22];
 const maxRoomParticipants = 5;
 
@@ -221,6 +229,7 @@ async function openHomeRoom() {
 async function openRoom(roomId: string, invite = "") {
   errorMessage.value = "";
   statusMessage.value = "";
+  isLoading.value = true;
   await leaveActiveRoom();
   cleanupVoice();
 
@@ -232,6 +241,8 @@ async function openRoom(roomId: string, invite = "") {
     scrollToAppTop();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Нет доступа к комнате";
+  } finally {
+    isLoading.value = false;
   }
 }
 
@@ -325,11 +336,13 @@ async function waitForTelegramInitData() {
 
   while (Date.now() - startedAt < timeoutMs) {
     prepareTelegramApp();
+    hydrateTelegramLaunch();
     const initData = getTelegramInitData();
     if (initData) return initData;
     await new Promise((resolve) => window.setTimeout(resolve, 100));
   }
 
+  hydrateTelegramLaunch();
   return getTelegramInitData();
 }
 
@@ -347,13 +360,14 @@ function hydrateTelegramLaunch() {
   const startParam =
     String(app?.initDataUnsafe?.start_param || "") ||
     new URLSearchParams(window.location.search).get("tgWebAppStartParam") ||
+    new URLSearchParams(window.location.search).get("startapp") ||
     "";
-  const [prefix, roomId, inviteCode] = startParam.split(":");
+  const launch = decodeEzcordRoomLaunch(startParam);
 
-  if (prefix !== "ezroom" || !roomId) return;
+  if (!launch) return;
 
-  telegramRoomId.value = roomId;
-  telegramInviteCode.value = inviteCode || "";
+  telegramRoomId.value = launch.roomId;
+  telegramInviteCode.value = launch.inviteCode;
 }
 
 function scrollToAppTop() {
@@ -426,6 +440,22 @@ useHead({
         @submit="submitAuth"
         @telegram-login="startTelegramLogin"
       />
+
+      <div v-else-if="!activeRoom && hasRequestedRoom" class="flex min-h-[calc(100vh-74px)] items-center justify-center px-6 py-7 max-[760px]:px-3.5">
+        <section class="grid w-full max-w-[420px] gap-3.5 rounded-[18px] border border-[#e5484d]/35 bg-gradient-to-b from-ez-card to-ez-card-2 p-[22px] shadow-ez">
+          <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Приглашение</p>
+          <h1 class="-mt-1 text-[25px] font-black leading-[1.08] text-ez-ink">Комната недоступна</h1>
+          <p class="text-sm font-bold leading-[1.55] text-ez-muted">{{ errorMessage || "Проверьте ссылку приглашения и попробуйте еще раз." }}</p>
+          <button
+            class="inline-flex min-h-[50px] items-center justify-center rounded-[14px] border border-ez-line bg-ez-card-2 px-[18px] text-[15px] font-black text-ez-ink transition hover:-translate-y-px hover:border-ez-green/55 disabled:cursor-default disabled:opacity-[.58] disabled:hover:translate-y-0"
+            :disabled="isLoading"
+            type="button"
+            @click="openRoom(roomFromQuery, inviteFromQuery)"
+          >
+            Повторить
+          </button>
+        </section>
+      </div>
 
       <div v-else-if="!activeRoom" class="flex min-h-[calc(100vh-74px)] items-center justify-center px-6 py-7 max-[760px]:px-3.5">
         <section class="grid w-full max-w-[420px] gap-3.5 rounded-[18px] border border-ez-line bg-gradient-to-b from-ez-card to-ez-card-2 p-[22px] shadow-ez">
