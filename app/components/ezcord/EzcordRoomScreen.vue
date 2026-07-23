@@ -21,6 +21,7 @@ const props = defineProps<{
   statusMessage: string;
   userId: string;
   userInitial: string;
+  userPhotoUrl: string;
   waitingCount: number;
   waveBars: number[];
 }>();
@@ -90,6 +91,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         :set-audio-sink="props.setAudioSink"
         :user-id="props.userId"
         :user-initial="props.userInitial"
+        :user-photo-url="props.userPhotoUrl"
         :wave-bars="props.waveBars"
         @invite="$emit('invite')"
         @kick="$emit('kick', $event)"

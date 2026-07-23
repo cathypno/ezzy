@@ -30,6 +30,7 @@ export interface Peer {
   peerId: string;
   userId?: string;
   displayName: string;
+  photoUrl?: string;
   lastSeenAt: string;
 }
 

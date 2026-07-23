@@ -12,6 +12,7 @@ const props = defineProps<{
   setAudioSink: (element: HTMLElement | null) => void;
   userId: string;
   userInitial: string;
+  userPhotoUrl: string;
   waveBars: number[];
 }>();
 
@@ -32,6 +33,10 @@ const accessGlyphs: Record<Room["access"], string> = {
   private: "INV",
   telegram_chat: "TG",
 };
+
+function hideBrokenAvatar(event: Event) {
+  (event.currentTarget as HTMLImageElement).classList.add("ez-peer-avatar--broken");
+}
 </script>
 
 <template>
@@ -49,14 +54,28 @@ const accessGlyphs: Record<Room["access"], string> = {
     <div class="ez-participants">
       <div class="ez-peer">
         <div class="ez-peer-circle ez-peer-circle--self" :class="{ 'ez-peer-circle--waiting': props.isWaiting }">
-          {{ props.userInitial }}
+          <img
+            v-if="props.userPhotoUrl"
+            class="ez-peer-avatar"
+            :src="props.userPhotoUrl"
+            alt=""
+            @error="hideBrokenAvatar"
+          />
+          <span class="ez-peer-avatar-fallback">{{ props.userInitial }}</span>
         </div>
         <p class="ez-peer-label">{{ props.isWaiting ? "в ожидании" : "вы" }}</p>
       </div>
 
       <div v-for="peer in props.peers" :key="peer.peerId" class="ez-peer">
         <div class="ez-peer-circle">
-          {{ getInitials(peer.displayName) }}
+          <img
+            v-if="peer.photoUrl"
+            class="ez-peer-avatar"
+            :src="peer.photoUrl"
+            :alt="peer.displayName"
+            @error="hideBrokenAvatar"
+          />
+          <span class="ez-peer-avatar-fallback">{{ getInitials(peer.displayName) }}</span>
           <button
             v-if="props.room.createdBy === props.userId"
             class="ez-kick"

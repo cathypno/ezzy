@@ -957,6 +957,21 @@ button {
   box-shadow: none;
 }
 
+.ez-peer-avatar {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.ez-peer-avatar--broken {
+  display: none;
+}
+
+.ez-peer-avatar:not(.ez-peer-avatar--broken) + .ez-peer-avatar-fallback {
+  display: none;
+}
+
 .ez-kick {
   position: absolute;
   right: -7px;

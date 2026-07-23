@@ -71,8 +71,3 @@ The webhook endpoint is:
 ```text
 /api/ezcord/telegram/webhook
 ```
-
-## Local UI mode
-
-Use `npm run dev:ui` to open the room with mock data at `http://127.0.0.1:3100/ezcord`.
-This mode does not require Telegram, authentication, Postgres, Redis or WebRTC and is intended for interface work.

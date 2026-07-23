@@ -56,6 +56,7 @@ export interface EzcordPeer {
   peerId: string;
   userId: string;
   displayName: string;
+  photoUrl?: string;
   lastSeenAt: string;
 }
 
@@ -663,6 +664,7 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
     peerId,
     userId: user.id,
     displayName: user.displayName,
+    photoUrl: user.telegram?.photoUrl,
     lastSeenAt: new Date().toISOString(),
   };
 
@@ -718,6 +720,7 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
   const existingPeer = data.peers.find((item) => item.roomId === roomId && item.peerId === peerId);
   if (existingPeer) {
     existingPeer.displayName = user.displayName;
+    existingPeer.photoUrl = user.telegram?.photoUrl;
     existingPeer.lastSeenAt = peer.lastSeenAt;
   } else {
     const roomPeers = data.peers.filter((item) => item.roomId === roomId);
