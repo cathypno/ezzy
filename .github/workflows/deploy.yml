@@ -73,6 +73,7 @@ jobs:
             app/composables \
             app/types \
             app/utils \
+            shared \
             server/api/ezcord \
             server/utils/ezcord.ts \
             server/utils/ezcordRealtime.ts \
