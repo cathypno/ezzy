@@ -29,6 +29,9 @@ const goalLabels: Record<RoomGoal, string> = {
   communication: "Общение",
 };
 
+const selectedGameIcon = computed(() => (gameFilter.value === "all" ? null : gameFilter.value));
+const selectedGoalIcon = computed(() => (goalFilter.value === "all" ? null : goalFilter.value));
+
 const filteredRooms = computed(() =>
   props.rooms.filter((room) => {
     if (gameFilter.value !== "all" && room.game !== gameFilter.value) return false;
@@ -63,21 +66,29 @@ function joinRandomRoom() {
         <div class="grid gap-2.5 border-b border-ez-line px-5 py-4 [grid-template-columns:minmax(0,1fr)_minmax(0,1fr)_52px] max-[640px]:grid-cols-1">
           <label class="block">
             <span class="text-[11px] font-black uppercase leading-[1.2] text-ez-muted">Игра</span>
-            <select v-model="gameFilter" class="mt-2 h-11 w-full rounded-[13px] border border-ez-field-line bg-ez-field px-3 text-sm font-extrabold text-ez-ink outline-none focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
-              <option value="all">Любая</option>
-              <option value="voicechat">Войсчат</option>
-              <option value="cs2">CS2</option>
-              <option value="dota2">Dota 2</option>
-              <option value="brawl_stars">Brawl Stars</option>
-            </select>
+            <span class="relative mt-2 block">
+              <EzcordMetaIcon v-if="selectedGameIcon" :name="selectedGameIcon" class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[18px] text-ez-green" />
+              <select v-model="gameFilter" class="h-11 w-full appearance-none rounded-[13px] border border-ez-field-line bg-ez-field py-0 pl-10 pr-9 text-sm font-extrabold text-ez-ink outline-none focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
+                <option value="all">Любая</option>
+                <option value="voicechat">Войсчат</option>
+                <option value="cs2">CS2</option>
+                <option value="dota2">Dota 2</option>
+                <option value="brawl_stars">Brawl Stars</option>
+              </select>
+              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-ez-muted">⌄</span>
+            </span>
           </label>
           <label class="block">
             <span class="text-[11px] font-black uppercase leading-[1.2] text-ez-muted">Цель</span>
-            <select v-model="goalFilter" class="mt-2 h-11 w-full rounded-[13px] border border-ez-field-line bg-ez-field px-3 text-sm font-extrabold text-ez-ink outline-none focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
-              <option value="all">Любая</option>
-              <option value="communication">Общение</option>
-              <option value="result">Результат</option>
-            </select>
+            <span class="relative mt-2 block">
+              <EzcordMetaIcon v-if="selectedGoalIcon" :name="selectedGoalIcon" class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[18px] text-[#ffd447]" />
+              <select v-model="goalFilter" class="h-11 w-full appearance-none rounded-[13px] border border-ez-field-line bg-ez-field py-0 pl-10 pr-9 text-sm font-extrabold text-ez-ink outline-none focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
+                <option value="all">Любая</option>
+                <option value="communication">Общение</option>
+                <option value="result">Результат</option>
+              </select>
+              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-ez-muted">⌄</span>
+            </span>
           </label>
           <button
             class="mt-[19px] grid h-11 w-[52px] place-items-center rounded-[13px] border border-ez-green/35 bg-ez-green-soft text-[21px] text-ez-green transition hover:-translate-y-px hover:border-ez-green disabled:cursor-default disabled:opacity-[.45] disabled:hover:translate-y-0 max-[640px]:mt-0 max-[640px]:w-full"
@@ -114,8 +125,14 @@ function joinRandomRoom() {
             >
               <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-black leading-none text-ez-ink">{{ room.name }}</span>
               <span class="flex flex-wrap gap-2">
-                <span class="rounded-full border border-ez-line bg-ez-card-2 px-2.5 py-1 text-[11px] font-black text-ez-muted">{{ gameLabels[room.game] }}</span>
-                <span class="rounded-full border border-ez-line bg-ez-card-2 px-2.5 py-1 text-[11px] font-black text-ez-muted">{{ goalLabels[room.goal] }}</span>
+                <span class="inline-flex items-center gap-1.5 rounded-full border border-ez-line bg-ez-card-2 px-2.5 py-1 text-[11px] font-black text-ez-muted">
+                  <EzcordMetaIcon :name="room.game" class="text-[14px] text-ez-green" />
+                  {{ gameLabels[room.game] }}
+                </span>
+                <span class="inline-flex items-center gap-1.5 rounded-full border border-ez-line bg-ez-card-2 px-2.5 py-1 text-[11px] font-black text-ez-muted">
+                  <EzcordMetaIcon :name="room.goal" class="text-[14px] text-[#ffd447]" />
+                  {{ goalLabels[room.goal] }}
+                </span>
               </span>
             </button>
           </div>

@@ -85,8 +85,14 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
         <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Комната</p>
         <h1 class="mt-2 text-[36px] font-black leading-none text-ez-ink max-[760px]:text-[32px]">{{ props.room.name }}</h1>
         <div class="mt-2.5 flex flex-wrap gap-2" aria-label="Параметры комнаты">
-          <span class="inline-flex min-h-7 items-center rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">Игра: {{ gameLabels[props.room.game] }}</span>
-          <span class="inline-flex min-h-7 items-center rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">Цель: {{ goalLabels[props.room.goal] }}</span>
+          <span class="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">
+            <EzcordMetaIcon :name="props.room.game" class="text-[15px] text-ez-green" />
+            Игра: {{ gameLabels[props.room.game] }}
+          </span>
+          <span class="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">
+            <EzcordMetaIcon :name="props.room.goal" class="text-[15px] text-[#ffd447]" />
+            Цель: {{ goalLabels[props.room.goal] }}
+          </span>
           <span class="inline-flex min-h-7 items-center rounded-full border border-ez-green/35 bg-ez-green-soft px-2.5 text-xs font-extrabold text-ez-green-dark">Участники: {{ props.participantCount }}/{{ props.maxRoomParticipants }}</span>
           <span v-if="props.waitingCount" class="inline-flex min-h-7 items-center rounded-full border border-ez-blue/35 bg-ez-blue-soft px-2.5 text-xs font-extrabold text-ez-blue">Ожидание: {{ props.waitingCount }}</span>
         </div>

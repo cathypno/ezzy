@@ -67,16 +67,24 @@ function submit() {
 
         <label class="block">
           <span class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Игра</span>
-          <select v-model="game" class="mt-2 h-[50px] w-full rounded-[14px] border border-ez-field-line bg-ez-field px-[15px] text-[15px] font-extrabold text-ez-ink outline-none transition focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
-            <option v-for="(label, value) in gameLabels" :key="value" :value="value">{{ label }}</option>
-          </select>
+          <span class="relative mt-2 block">
+            <EzcordMetaIcon :name="game" class="pointer-events-none absolute left-[15px] top-1/2 z-10 -translate-y-1/2 text-[20px] text-ez-green" />
+            <select v-model="game" class="h-[50px] w-full appearance-none rounded-[14px] border border-ez-field-line bg-ez-field py-0 pl-12 pr-10 text-[15px] font-extrabold text-ez-ink outline-none transition focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
+              <option v-for="(label, value) in gameLabels" :key="value" :value="value">{{ label }}</option>
+            </select>
+            <span class="pointer-events-none absolute right-[15px] top-1/2 -translate-y-1/2 text-xs font-black text-ez-muted">⌄</span>
+          </span>
         </label>
 
         <label class="block">
           <span class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Цель</span>
-          <select v-model="goal" class="mt-2 h-[50px] w-full rounded-[14px] border border-ez-field-line bg-ez-field px-[15px] text-[15px] font-extrabold text-ez-ink outline-none transition focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
-            <option v-for="(label, value) in goalLabels" :key="value" :value="value">{{ label }}</option>
-          </select>
+          <span class="relative mt-2 block">
+            <EzcordMetaIcon :name="goal" class="pointer-events-none absolute left-[15px] top-1/2 z-10 -translate-y-1/2 text-[20px] text-[#ffd447]" />
+            <select v-model="goal" class="h-[50px] w-full appearance-none rounded-[14px] border border-ez-field-line bg-ez-field py-0 pl-12 pr-10 text-[15px] font-extrabold text-ez-ink outline-none transition focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
+              <option v-for="(label, value) in goalLabels" :key="value" :value="value">{{ label }}</option>
+            </select>
+            <span class="pointer-events-none absolute right-[15px] top-1/2 -translate-y-1/2 text-xs font-black text-ez-muted">⌄</span>
+          </span>
         </label>
 
         <div class="mt-1 flex justify-end gap-2.5 max-[760px]:grid max-[760px]:grid-cols-2">
