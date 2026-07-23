@@ -42,3 +42,12 @@ export interface SignalMessage {
   payload: any;
   createdAt: string;
 }
+
+export interface VoiceConnectionDiagnostic {
+  peerId: string;
+  connectionState: RTCPeerConnectionState | "new";
+  iceConnectionState: RTCIceConnectionState | "new";
+  hasRemoteAudioTrack: boolean;
+  autoplayBlocked: boolean;
+  selectedCandidateType?: string;
+}

@@ -1,5 +1,11 @@
 import { ref, type Ref } from "vue";
-import type { Peer, Room, SignalMessage, User } from "~/types/ezcord";
+import type {
+  Peer,
+  Room,
+  SignalMessage,
+  User,
+  VoiceConnectionDiagnostic,
+} from "~/types/ezcord";
 
 interface UseEzcordVoiceOptions {
   activeRoom: Ref<Room | null>;
@@ -7,6 +13,11 @@ interface UseEzcordVoiceOptions {
   invite: Ref<string>;
   errorMessage: Ref<string>;
   statusMessage: Ref<string>;
+}
+
+interface IceConfigResponse {
+  iceServers: RTCIceServer[];
+  ttlSeconds: number;
 }
 
 export function useEzcordVoice({
@@ -23,6 +34,7 @@ export function useEzcordVoice({
   const localPeerId = ref("");
   const peers = ref<Peer[]>([]);
   const connectedPeerIds = ref<string[]>([]);
+  const connectionDiagnostics = ref<VoiceConnectionDiagnostic[]>([]);
   const audioSink = ref<HTMLElement | null>(null);
 
   let mediaStream: MediaStream | null = null;
@@ -36,6 +48,9 @@ export function useEzcordVoice({
   let isLeavingRoom = false;
   let micAudioContext: AudioContext | null = null;
   let audioUnlockInstalled = false;
+  let iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  let iceConfigExpiresAt = 0;
+  let iceConfigRequest: Promise<RTCIceServer[]> | null = null;
   const audioUnlockMessage = "Нажмите MIC или экран, чтобы включить звук комнаты";
   const peerConnections = new Map<string, RTCPeerConnection>();
   const remoteAudios = new Map<string, HTMLAudioElement>();
@@ -126,6 +141,7 @@ export function useEzcordVoice({
     );
     peers.value = [];
     connectedPeerIds.value = [];
+    connectionDiagnostics.value = [];
     isWaiting.value = false;
     waitingCount.value = 0;
     lastSignalAt = "";
@@ -503,10 +519,16 @@ export function useEzcordVoice({
     if (existing) return existing;
 
     const connection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: await getIceServers(),
     });
 
     peerConnections.set(peerId, connection);
+    upsertConnectionDiagnostic(peerId, {
+      connectionState: connection.connectionState,
+      iceConnectionState: connection.iceConnectionState,
+      hasRemoteAudioTrack: false,
+      autoplayBlocked: false,
+    });
     if (mediaStream) {
       await addLocalTracks(connection);
     } else {
@@ -521,11 +543,20 @@ export function useEzcordVoice({
 
     connection.ontrack = (event) => {
       const stream = event.streams[0];
-      if (stream) attachRemoteAudio(peerId, stream);
+      if (stream) {
+        upsertConnectionDiagnostic(peerId, { hasRemoteAudioTrack: true });
+        attachRemoteAudio(peerId, stream);
+      }
     };
 
-    connection.onconnectionstatechange = () => updateConnectedPeers();
-    connection.oniceconnectionstatechange = () => updateConnectedPeers();
+    connection.onconnectionstatechange = () => {
+      updateConnectedPeers();
+      void refreshConnectionDiagnostic(peerId, connection);
+    };
+    connection.oniceconnectionstatechange = () => {
+      updateConnectedPeers();
+      void refreshConnectionDiagnostic(peerId, connection);
+    };
 
     if (shouldOffer) {
       await createOffer(peerId, connection);
@@ -645,6 +676,9 @@ export function useEzcordVoice({
     ignoredOfferPeers.delete(peerId);
     remoteAudios.get(peerId)?.remove();
     remoteAudios.delete(peerId);
+    connectionDiagnostics.value = connectionDiagnostics.value.filter(
+      (item) => item.peerId !== peerId,
+    );
     updateConnectedPeers();
   }
 
@@ -664,6 +698,27 @@ export function useEzcordVoice({
     }
   }
 
+  async function getIceServers() {
+    if (Date.now() < iceConfigExpiresAt) return iceServers;
+    if (iceConfigRequest) return await iceConfigRequest;
+
+    iceConfigRequest = $fetch<IceConfigResponse>("/api/ezcord/voice/ice")
+      .then((response) => {
+        if (response.iceServers?.length) {
+          iceServers = response.iceServers;
+          iceConfigExpiresAt =
+            Date.now() + Math.max(60, response.ttlSeconds - 60) * 1000;
+        }
+        return iceServers;
+      })
+      .catch(() => iceServers)
+      .finally(() => {
+        iceConfigRequest = null;
+      });
+
+    return await iceConfigRequest;
+  }
+
   function appendRemoteAudio(audio: HTMLAudioElement) {
     const container = audioSink.value || document.body;
     if (audio.parentElement !== container) {
@@ -672,6 +727,7 @@ export function useEzcordVoice({
   }
 
   async function playRemoteAudio(audio: HTMLAudioElement) {
+    const peerId = audio.dataset.peerId || "";
     audio.muted = false;
     audio.volume = 1;
     try {
@@ -679,7 +735,13 @@ export function useEzcordVoice({
       if (statusMessage.value === audioUnlockMessage) {
         statusMessage.value = "";
       }
+      if (peerId) {
+        upsertConnectionDiagnostic(peerId, { autoplayBlocked: false });
+      }
     } catch {
+      if (peerId) {
+        upsertConnectionDiagnostic(peerId, { autoplayBlocked: true });
+      }
       statusMessage.value = audioUnlockMessage;
     }
   }
@@ -731,6 +793,64 @@ export function useEzcordVoice({
 
   function handleAudioUnlock() {
     void resumeRemoteAudios();
+  }
+
+  function upsertConnectionDiagnostic(
+    peerId: string,
+    patch: Partial<VoiceConnectionDiagnostic>,
+  ) {
+    const current = connectionDiagnostics.value.find(
+      (item) => item.peerId === peerId,
+    ) || {
+      peerId,
+      connectionState: "new" as const,
+      iceConnectionState: "new" as const,
+      hasRemoteAudioTrack: false,
+      autoplayBlocked: false,
+    };
+
+    const next = { ...current, ...patch };
+    connectionDiagnostics.value = connectionDiagnostics.value
+      .filter((item) => item.peerId !== peerId)
+      .concat(next);
+  }
+
+  async function refreshConnectionDiagnostic(
+    peerId: string,
+    connection: RTCPeerConnection,
+  ) {
+    const patch: Partial<VoiceConnectionDiagnostic> = {
+      connectionState: connection.connectionState,
+      iceConnectionState: connection.iceConnectionState,
+    };
+
+    const selectedCandidateType = await getSelectedCandidateType(connection);
+    if (selectedCandidateType) {
+      patch.selectedCandidateType = selectedCandidateType;
+    }
+
+    upsertConnectionDiagnostic(peerId, patch);
+  }
+
+  async function getSelectedCandidateType(connection: RTCPeerConnection) {
+    const stats = await connection.getStats().catch(() => null);
+    if (!stats) return "";
+
+    let localCandidateId = "";
+    stats.forEach((report: any) => {
+      if (localCandidateId || report.type !== "candidate-pair") return;
+      if (
+        report.selected ||
+        (report.nominated && report.state === "succeeded")
+      ) {
+        localCandidateId = report.localCandidateId || "";
+      }
+    });
+
+    const candidate = localCandidateId
+      ? (stats.get(localCandidateId) as any)
+      : null;
+    return String(candidate?.candidateType || "");
   }
 
   function roomApiPath(action: string) {
@@ -791,6 +911,7 @@ export function useEzcordVoice({
 
   return {
     connectedPeerIds,
+    connectionDiagnostics,
     isWaiting,
     isMicOn,
     kickPeer,

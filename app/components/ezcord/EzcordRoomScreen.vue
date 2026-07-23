@@ -3,10 +3,11 @@ import { ref } from "vue";
 import EzcordRoomSidebar from "~/components/ezcord/EzcordRoomSidebar.vue";
 import EzcordRoomSettingsModal from "~/components/ezcord/EzcordRoomSettingsModal.vue";
 import EzcordRoomStage from "~/components/ezcord/EzcordRoomStage.vue";
-import type { Peer, Room, RoomGame, RoomGoal } from "~/types/ezcord";
+import type { Peer, Room, RoomGame, RoomGoal, VoiceConnectionDiagnostic } from "~/types/ezcord";
 
 const props = defineProps<{
   connectedCount: number;
+  connectionDiagnostics: VoiceConnectionDiagnostic[];
   copied: boolean;
   errorMessage: string;
   isMicOn: boolean;
@@ -99,6 +100,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
       />
       <EzcordRoomSidebar
         :error-message="props.errorMessage"
+        :connection-diagnostics="props.connectionDiagnostics"
         :is-waiting="props.isWaiting"
         :max-room-participants="props.maxRoomParticipants"
         :participant-count="props.participantCount"

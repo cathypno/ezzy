@@ -43,6 +43,7 @@ const maxRoomParticipants = 5;
 
 const {
   connectedPeerIds,
+  connectionDiagnostics,
   isWaiting,
   isMicOn,
   kickPeer,
@@ -477,6 +478,7 @@ useHead({
       <EzcordRoomScreen
         v-else
         :connected-count="connectedCount"
+        :connection-diagnostics="connectionDiagnostics"
         :copied="copiedRoomId === activeRoom.id"
         :error-message="errorMessage"
         :is-mic-on="visibleMicOn"
