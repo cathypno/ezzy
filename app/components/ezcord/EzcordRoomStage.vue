@@ -151,6 +151,6 @@ function hideBrokenAvatar(event: Event) {
       </div>
     </div>
 
-    <div :ref="props.setAudioSink" class="hidden"></div>
+    <div :ref="props.setAudioSink" class="pointer-events-none fixed left-0 top-0 h-0 w-0 overflow-hidden opacity-0"></div>
   </section>
 </template>

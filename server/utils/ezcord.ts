@@ -648,7 +648,6 @@ export async function linkTelegramToEzcordUser(userId: string, initData: string)
 
 export async function canAccessRoom(user: EzcordUser, room: EzcordRoom, inviteCode?: string): Promise<boolean> {
   if (room.closedAt) return false;
-  if (await isUserKickedFromRoom(room.id, user.id)) return false;
   if (room.createdBy === user.id) return true;
   if (room.access === "public") return true;
   if (room.access === "private") return Boolean(room.inviteCode && room.inviteCode === inviteCode);
@@ -851,10 +850,6 @@ export async function requireRoomAccess(event: H3Event): Promise<{ user: EzcordU
 }
 
 export async function touchEzcordPeer(roomId: string, peerId: string, user: EzcordUser): Promise<EzcordPresenceState> {
-  if (await isUserKickedFromRoom(roomId, user.id)) {
-    throw createError({ statusCode: 403, message: "Вас кикнули из этой комнаты" });
-  }
-
   const peer: EzcordPeer = {
     roomId,
     peerId,
@@ -1015,10 +1010,6 @@ export async function kickEzcordPeer(room: EzcordRoom, peerId: string, actor: Ez
   const targetPeer = await getLivePeer(room.id, peerId);
   if (targetPeer?.userId === actor.id) {
     throw createError({ statusCode: 400, message: "Нельзя кикнуть себя" });
-  }
-
-  if (targetPeer) {
-    await recordKickedPeer(room.id, targetPeer.userId, actor.id);
   }
 
   if (useRedisLiveState()) {

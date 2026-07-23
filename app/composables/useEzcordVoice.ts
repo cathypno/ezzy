@@ -9,7 +9,13 @@ interface UseEzcordVoiceOptions {
   statusMessage: Ref<string>;
 }
 
-export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusMessage }: UseEzcordVoiceOptions) {
+export function useEzcordVoice({
+  activeRoom,
+  user,
+  invite,
+  errorMessage,
+  statusMessage,
+}: UseEzcordVoiceOptions) {
   const isMicOn = ref(false);
   const micLevel = ref(0);
   const isWaiting = ref(false);
@@ -28,8 +34,14 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
   let lastSignalAt = "";
   let roomSocket: WebSocket | null = null;
   let isLeavingRoom = false;
+  let micAudioContext: AudioContext | null = null;
+  let audioUnlockInstalled = false;
+  const audioUnlockMessage = "Нажмите MIC или экран, чтобы включить звук комнаты";
   const peerConnections = new Map<string, RTCPeerConnection>();
   const remoteAudios = new Map<string, HTMLAudioElement>();
+  const pendingIceCandidates = new Map<string, RTCIceCandidateInit[]>();
+  const makingOffers = new Map<string, boolean>();
+  const ignoredOfferPeers = new Set<string>();
 
   async function toggleMic() {
     if (isWaiting.value) {
@@ -43,10 +55,14 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     }
 
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
       isMicOn.value = true;
       watchMicLevel(mediaStream);
       await publishLocalTracks();
+      await resumeRemoteAudios();
     } catch {
       errorMessage.value = "Микрофон недоступен";
     }
@@ -60,6 +76,8 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
     mediaStream?.getTracks().forEach((track) => track.stop());
     mediaStream = null;
+    micAudioContext?.close().catch(() => {});
+    micAudioContext = null;
     isMicOn.value = false;
     micLevel.value = 0;
 
@@ -76,14 +94,18 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
   }
 
   function watchMicLevel(stream: MediaStream) {
-    const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextConstructor =
+      window.AudioContext || (window as any).webkitAudioContext;
     const audioContext = new AudioContextConstructor();
+    micAudioContext?.close().catch(() => {});
+    micAudioContext = audioContext;
     const analyser = audioContext.createAnalyser();
     const source = audioContext.createMediaStreamSource(stream);
     const samples = new Uint8Array(analyser.frequencyBinCount);
 
     analyser.fftSize = 256;
     source.connect(analyser);
+    audioContext.resume?.().catch(() => {});
 
     const tick = () => {
       analyser.getByteFrequencyData(samples);
@@ -98,13 +120,17 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
   function startSignaling() {
     if (!activeRoom.value) return;
 
-    localPeerId.value = getRoomPeerId(activeRoom.value.id, user.value?.id || "user");
+    localPeerId.value = getRoomPeerId(
+      activeRoom.value.id,
+      user.value?.id || "user",
+    );
     peers.value = [];
     connectedPeerIds.value = [];
     isWaiting.value = false;
     waitingCount.value = 0;
     lastSignalAt = "";
     isLeavingRoom = false;
+    installAudioUnlockHandlers();
 
     if (typeof window !== "undefined" && "WebSocket" in window) {
       startWebSocketSignaling();
@@ -151,8 +177,12 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
       connection.close();
     }
     peerConnections.clear();
+    pendingIceCandidates.clear();
+    makingOffers.clear();
+    ignoredOfferPeers.clear();
     remoteAudios.forEach((audio) => audio.remove());
     remoteAudios.clear();
+    removeAudioUnlockHandlers();
     peers.value = [];
     connectedPeerIds.value = [];
     isWaiting.value = false;
@@ -177,9 +207,17 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
   }
 
   function beaconLeaveActiveRoom() {
-    if (!activeRoom.value || !localPeerId.value || typeof navigator === "undefined" || !navigator.sendBeacon) return;
+    if (
+      !activeRoom.value ||
+      !localPeerId.value ||
+      typeof navigator === "undefined" ||
+      !navigator.sendBeacon
+    )
+      return;
 
-    const body = new Blob([JSON.stringify({ peerId: localPeerId.value })], { type: "application/json" });
+    const body = new Blob([JSON.stringify({ peerId: localPeerId.value })], {
+      type: "application/json",
+    });
     navigator.sendBeacon(roomApiPath("leave"), body);
   }
 
@@ -188,12 +226,17 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
     let response: { peers: Peer[]; waiting: boolean; waitingCount: number };
     try {
-      response = await $fetch<{ peers: Peer[]; waiting: boolean; waitingCount: number }>(roomApiPath("presence"), {
+      response = await $fetch<{
+        peers: Peer[];
+        waiting: boolean;
+        waitingCount: number;
+      }>(roomApiPath("presence"), {
         method: "POST",
         body: { peerId: localPeerId.value },
       });
     } catch (error: any) {
-      errorMessage.value = error?.data?.message || "Не получилось войти в комнату";
+      errorMessage.value =
+        error?.data?.message || "Не получилось войти в комнату";
       activeRoom.value = null;
       cleanupVoice();
       return;
@@ -377,7 +420,8 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
       closePeer(peerId);
       peers.value = peers.value.filter((peer) => peer.peerId !== peerId);
     } catch (error: any) {
-      errorMessage.value = error?.data?.message || "Не получилось кикнуть участника";
+      errorMessage.value =
+        error?.data?.message || "Не получилось кикнуть участника";
     }
   }
 
@@ -388,7 +432,9 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     if (lastSignalAt) query.set("after", lastSignalAt);
     if (invite.value) query.set("invite", invite.value);
 
-    const response = await $fetch<{ signals: SignalMessage[] }>(`/api/ezcord/rooms/${activeRoom.value.id}/signals?${query}`);
+    const response = await $fetch<{ signals: SignalMessage[] }>(
+      `/api/ezcord/rooms/${activeRoom.value.id}/signals?${query}`,
+    );
 
     for (const signal of response.signals) {
       lastSignalAt = signal.createdAt;
@@ -400,7 +446,27 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     const connection = await ensurePeerConnection(signal.fromPeerId, false);
 
     if (signal.type === "offer") {
-      await connection.setRemoteDescription(new RTCSessionDescription(signal.payload));
+      const offerCollision =
+        Boolean(makingOffers.get(signal.fromPeerId)) ||
+        connection.signalingState !== "stable";
+      const polite = localPeerId.value > signal.fromPeerId;
+
+      if (offerCollision && !polite) {
+        ignoredOfferPeers.add(signal.fromPeerId);
+        return;
+      }
+
+      ignoredOfferPeers.delete(signal.fromPeerId);
+      if (offerCollision) {
+        await connection
+          .setLocalDescription({ type: "rollback" } as RTCSessionDescriptionInit)
+          .catch(() => {});
+      }
+
+      await connection.setRemoteDescription(
+        new RTCSessionDescription(signal.payload),
+      );
+      await flushQueuedIceCandidates(signal.fromPeerId, connection);
       await addLocalTracks(connection);
       const answer = await connection.createAnswer();
       await connection.setLocalDescription(answer);
@@ -409,14 +475,26 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     }
 
     if (signal.type === "answer") {
+      ignoredOfferPeers.delete(signal.fromPeerId);
       if (connection.signalingState !== "stable") {
-        await connection.setRemoteDescription(new RTCSessionDescription(signal.payload));
+        await connection.setRemoteDescription(
+          new RTCSessionDescription(signal.payload),
+        );
+        await flushQueuedIceCandidates(signal.fromPeerId, connection);
       }
       return;
     }
 
     if (signal.type === "candidate") {
-      await connection.addIceCandidate(new RTCIceCandidate(signal.payload)).catch(() => {});
+      if (ignoredOfferPeers.has(signal.fromPeerId)) return;
+
+      if (!connection.remoteDescription) {
+        queueIceCandidate(signal.fromPeerId, signal.payload);
+        return;
+      }
+      await connection
+        .addIceCandidate(new RTCIceCandidate(signal.payload))
+        .catch(() => {});
     }
   }
 
@@ -447,6 +525,7 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     };
 
     connection.onconnectionstatechange = () => updateConnectedPeers();
+    connection.oniceconnectionstatechange = () => updateConnectedPeers();
 
     if (shouldOffer) {
       await createOffer(peerId, connection);
@@ -455,14 +534,28 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     return connection;
   }
 
-  async function createOffer(peerId: string, connection = peerConnections.get(peerId)) {
+  async function createOffer(
+    peerId: string,
+    connection = peerConnections.get(peerId),
+  ) {
     if (!connection) return;
-    const offer = await connection.createOffer();
-    await connection.setLocalDescription(offer);
-    await sendSignal(peerId, "offer", offer);
+    if (connection.signalingState !== "stable") return;
+
+    makingOffers.set(peerId, true);
+    try {
+      const offer = await connection.createOffer();
+      await connection.setLocalDescription(offer);
+      await sendSignal(peerId, "offer", offer);
+    } finally {
+      makingOffers.delete(peerId);
+    }
   }
 
-  async function sendSignal(toPeerId: string, type: SignalMessage["type"], payload: any) {
+  async function sendSignal(
+    toPeerId: string,
+    type: SignalMessage["type"],
+    payload: any,
+  ) {
     if (!activeRoom.value || !localPeerId.value) return;
 
     if (roomSocket?.readyState === WebSocket.OPEN) {
@@ -490,7 +583,9 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
   async function addLocalTracks(connection: RTCPeerConnection) {
     if (!mediaStream) return;
-    const hasAudioSender = connection.getSenders().some((sender) => sender.track?.kind === "audio");
+    const hasAudioSender = connection
+      .getSenders()
+      .some((sender) => sender.track?.kind === "audio");
     if (hasAudioSender) return;
 
     const track = mediaStream.getAudioTracks()[0];
@@ -498,7 +593,11 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
     const idleTransceiver = connection
       .getTransceivers()
-      .find((transceiver) => transceiver.receiver.track.kind === "audio" && !transceiver.sender.track);
+      .find(
+        (transceiver) =>
+          transceiver.receiver.track.kind === "audio" &&
+          !transceiver.sender.track,
+      );
 
     if (idleTransceiver) {
       await idleTransceiver.sender.replaceTrack(track);
@@ -534,11 +633,16 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
       remoteAudios.set(peerId, audio);
     }
     audio.srcObject = stream;
+    appendRemoteAudio(audio);
+    void playRemoteAudio(audio);
   }
 
   function closePeer(peerId: string) {
     peerConnections.get(peerId)?.close();
     peerConnections.delete(peerId);
+    pendingIceCandidates.delete(peerId);
+    makingOffers.delete(peerId);
+    ignoredOfferPeers.delete(peerId);
     remoteAudios.get(peerId)?.remove();
     remoteAudios.delete(peerId);
     updateConnectedPeers();
@@ -546,17 +650,94 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
   function updateConnectedPeers() {
     connectedPeerIds.value = Array.from(peerConnections.entries())
-      .filter(([, connection]) => ["connected", "completed"].includes(connection.connectionState))
+      .filter(([, connection]) =>
+        ["connected", "completed"].includes(connection.connectionState),
+      )
       .map(([peerId]) => peerId);
   }
 
   function setAudioSink(element: HTMLElement | null) {
     audioSink.value = element;
+    if (element) {
+      remoteAudios.forEach((audio) => appendRemoteAudio(audio));
+      void resumeRemoteAudios();
+    }
+  }
+
+  function appendRemoteAudio(audio: HTMLAudioElement) {
+    const container = audioSink.value || document.body;
+    if (audio.parentElement !== container) {
+      container.appendChild(audio);
+    }
+  }
+
+  async function playRemoteAudio(audio: HTMLAudioElement) {
+    audio.muted = false;
+    audio.volume = 1;
+    try {
+      await audio.play();
+      if (statusMessage.value === audioUnlockMessage) {
+        statusMessage.value = "";
+      }
+    } catch {
+      statusMessage.value = audioUnlockMessage;
+    }
+  }
+
+  async function resumeRemoteAudios() {
+    await Promise.all(
+      Array.from(remoteAudios.values()).map((audio) => playRemoteAudio(audio)),
+    );
+  }
+
+  function queueIceCandidate(peerId: string, payload: RTCIceCandidateInit) {
+    const queued = pendingIceCandidates.get(peerId) || [];
+    queued.push(payload);
+    pendingIceCandidates.set(peerId, queued);
+  }
+
+  async function flushQueuedIceCandidates(
+    peerId: string,
+    connection: RTCPeerConnection,
+  ) {
+    if (!connection.remoteDescription) return;
+
+    const queued = pendingIceCandidates.get(peerId);
+    if (!queued?.length) return;
+
+    pendingIceCandidates.delete(peerId);
+    for (const payload of queued) {
+      await connection
+        .addIceCandidate(new RTCIceCandidate(payload))
+        .catch(() => {});
+    }
+  }
+
+  function installAudioUnlockHandlers() {
+    if (audioUnlockInstalled || typeof document === "undefined") return;
+    audioUnlockInstalled = true;
+    document.addEventListener("pointerdown", handleAudioUnlock, {
+      passive: true,
+    });
+    document.addEventListener("touchend", handleAudioUnlock, { passive: true });
+  }
+
+  function removeAudioUnlockHandlers() {
+    if (!audioUnlockInstalled || typeof document === "undefined") return;
+    audioUnlockInstalled = false;
+    document.removeEventListener("pointerdown", handleAudioUnlock);
+    document.removeEventListener("touchend", handleAudioUnlock);
+  }
+
+  function handleAudioUnlock() {
+    void resumeRemoteAudios();
   }
 
   function roomApiPath(action: string) {
     if (!activeRoom.value) return "";
-    const query = invite.value ? `?invite=${encodeURIComponent(invite.value)}` : "";
+    const query = invite.value
+      ? `?invite=${encodeURIComponent(invite.value)}`
+      : "";
     return `/api/ezcord/rooms/${activeRoom.value.id}/${action}${query}`;
   }
 
@@ -596,7 +777,11 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
       const key = peer.userId || peer.peerId;
       const existing = latestByUser.get(key);
-      if (!existing || new Date(peer.lastSeenAt).getTime() >= new Date(existing.lastSeenAt).getTime()) {
+      if (
+        !existing ||
+        new Date(peer.lastSeenAt).getTime() >=
+          new Date(existing.lastSeenAt).getTime()
+      ) {
         latestByUser.set(key, peer);
       }
     }
