@@ -14,8 +14,10 @@ import {
 } from "../../utils/ezcord";
 import {
   attachEzcordRealtimePeer,
+  attachEzcordRealtimeWaitingPeer,
   broadcastEzcordRealtimePeerList,
   detachEzcordRealtimePeer,
+  detachEzcordRealtimeWaitingPeer,
   sendEzcordRealtimePeer,
 } from "../../utils/ezcordRealtime";
 
@@ -24,6 +26,7 @@ interface EzcordWsContext {
   peerId: string;
   user: EzcordUser;
   rateKey: string;
+  waiting: boolean;
 }
 
 type EzcordClientMessage =
@@ -66,20 +69,27 @@ export default defineWebSocketHandler({
         throw createError({ statusCode: 403, message: "Нет доступа к комнате" });
       }
 
-      await touchEzcordPeer(room.id, peerId, user);
+      const presence = await touchEzcordPeer(room.id, peerId, user);
       peer.context.ezcord = {
         roomId: room.id,
         peerId,
         user,
         rateKey: `${user.id}:${peer.remoteAddress || "unknown"}`,
+        waiting: presence.waiting,
       } satisfies EzcordWsContext;
 
-      attachEzcordRealtimePeer(room.id, peerId, user.id, peer);
+      if (presence.waiting) {
+        attachEzcordRealtimeWaitingPeer(room.id, peerId, user.id, peer);
+      } else {
+        attachEzcordRealtimePeer(room.id, peerId, user.id, peer);
+      }
       sendJson(peer, {
         type: "ready",
         roomId: room.id,
         peerId,
         maxParticipants: EZCORD_MAX_ROOM_PARTICIPANTS,
+        waiting: presence.waiting,
+        waitingCount: presence.waitingCount,
       });
       await broadcastEzcordRealtimePeerList(room.id);
     } catch (error: any) {
@@ -111,7 +121,15 @@ export default defineWebSocketHandler({
       }
 
       if (payload.type === "ping") {
-        await touchEzcordPeer(context.roomId, context.peerId, context.user);
+        const presence = await touchEzcordPeer(context.roomId, context.peerId, context.user);
+        if (context.waiting && !presence.waiting) {
+          context.waiting = false;
+          detachEzcordRealtimeWaitingPeer(context.roomId, context.peerId, peer);
+          attachEzcordRealtimePeer(context.roomId, context.peerId, context.user.id, peer);
+          sendJson(peer, { type: "ready", waiting: false, waitingCount: presence.waitingCount });
+        } else if (context.waiting) {
+          sendJson(peer, { type: "waiting", waiting: true, waitingCount: presence.waitingCount });
+        }
         sendJson(peer, { type: "pong", at: new Date().toISOString() });
         await broadcastEzcordRealtimePeerList(context.roomId);
         return;
@@ -150,8 +168,12 @@ export default defineWebSocketHandler({
     const context = getContext(peer);
     if (!context) return;
 
-    detachEzcordRealtimePeer(context.roomId, context.peerId, peer);
-    await leaveEzcordPeer(context.roomId, context.peerId, context.user.id).catch(() => {});
+    const detached = context.waiting
+      ? detachEzcordRealtimeWaitingPeer(context.roomId, context.peerId, peer)
+      : detachEzcordRealtimePeer(context.roomId, context.peerId, peer);
+    if (detached) {
+      await leaveEzcordPeer(context.roomId, context.peerId, context.user.id).catch(() => {});
+    }
     await broadcastEzcordRealtimePeerList(context.roomId).catch(() => {});
   },
 
@@ -159,8 +181,12 @@ export default defineWebSocketHandler({
     const context = getContext(peer);
     if (!context) return;
 
-    detachEzcordRealtimePeer(context.roomId, context.peerId, peer);
-    await leaveEzcordPeer(context.roomId, context.peerId, context.user.id).catch(() => {});
+    const detached = context.waiting
+      ? detachEzcordRealtimeWaitingPeer(context.roomId, context.peerId, peer)
+      : detachEzcordRealtimePeer(context.roomId, context.peerId, peer);
+    if (detached) {
+      await leaveEzcordPeer(context.roomId, context.peerId, context.user.id).catch(() => {});
+    }
     await broadcastEzcordRealtimePeerList(context.roomId).catch(() => {});
   },
 });

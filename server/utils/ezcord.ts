@@ -11,6 +11,8 @@ const TELEGRAM_EMAIL_DOMAIN = "telegram.ezcord.local";
 export const EZCORD_MAX_ROOM_PARTICIPANTS = 5;
 
 export type EzcordRoomAccess = "public" | "private" | "telegram_chat";
+export type EzcordRoomGame = "voicechat" | "cs2" | "dota2" | "brawl_stars";
+export type EzcordRoomGoal = "result" | "communication";
 
 export interface EzcordUser {
   id: string;
@@ -34,6 +36,8 @@ export interface EzcordRoom {
   id: string;
   name: string;
   access: EzcordRoomAccess;
+  game: EzcordRoomGame;
+  goal: EzcordRoomGoal;
   inviteCode?: string;
   telegramChatId?: string;
   createdBy: string;
@@ -53,6 +57,20 @@ export interface EzcordPeer {
   userId: string;
   displayName: string;
   lastSeenAt: string;
+}
+
+export interface EzcordWaitingPeer {
+  roomId: string;
+  peerId: string;
+  userId: string;
+  displayName: string;
+  queuedAt: string;
+}
+
+export interface EzcordPresenceState {
+  peers: EzcordPeer[];
+  waiting: boolean;
+  waitingCount: number;
 }
 
 export interface EzcordSignal {
@@ -77,6 +95,7 @@ interface EzcordData {
   sessions: EzcordSession[];
   rooms: EzcordRoom[];
   peers: EzcordPeer[];
+  waitingPeers: EzcordWaitingPeer[];
   signals: EzcordSignal[];
   kickedPeers: EzcordKickedPeer[];
 }
@@ -105,7 +124,7 @@ const telegramChatLocks = new Map<string, Promise<void>>();
 export function readEzcordData(): EzcordData {
   const path = getEzcordDataPath();
   if (!existsSync(path)) {
-    const initial: EzcordData = { users: [], sessions: [], rooms: [], peers: [], signals: [], kickedPeers: [] };
+    const initial: EzcordData = { users: [], sessions: [], rooms: [], peers: [], waitingPeers: [], signals: [], kickedPeers: [] };
     writeEzcordData(initial);
     return initial;
   }
@@ -114,8 +133,13 @@ export function readEzcordData(): EzcordData {
   return {
     users: data.users || [],
     sessions: data.sessions || [],
-    rooms: data.rooms || [],
+    rooms: (data.rooms || []).map((room) => ({
+      ...room,
+      game: room.game || "voicechat",
+      goal: room.goal || "communication",
+    })),
     peers: data.peers || [],
+    waitingPeers: data.waitingPeers || [],
     signals: data.signals || [],
     kickedPeers: data.kickedPeers || [],
   };
@@ -457,6 +481,8 @@ export async function canAccessRoom(user: EzcordUser, room: EzcordRoom, inviteCo
 export async function createEzcordRoom(params: {
   name: string;
   access: EzcordRoomAccess;
+  game?: EzcordRoomGame;
+  goal?: EzcordRoomGoal;
   createdBy: string;
   telegramChatId?: string;
 }): Promise<EzcordRoom> {
@@ -464,6 +490,8 @@ export async function createEzcordRoom(params: {
     id: randomId("room"),
     name: params.name.trim() || "Новая комната",
     access: params.access,
+    game: params.game || "voicechat",
+    goal: params.goal || "communication",
     createdBy: params.createdBy,
     telegramChatId: params.telegramChatId?.trim() || undefined,
     inviteCode: params.access === "public" ? undefined : randomId("invite"),
@@ -474,9 +502,9 @@ export async function createEzcordRoom(params: {
     const pool = await getPgPool();
     await pool.query(
       `insert into ezcord_rooms
-        (id, name, access, invite_code, telegram_chat_id, created_by, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7)`,
-      [room.id, room.name, room.access, room.inviteCode, room.telegramChatId, room.createdBy, room.createdAt],
+        (id, name, access, game, goal, invite_code, telegram_chat_id, created_by, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [room.id, room.name, room.access, room.game, room.goal, room.inviteCode, room.telegramChatId, room.createdBy, room.createdAt],
     );
     return room;
   }
@@ -552,6 +580,55 @@ export async function getEzcordRoom(roomId: string): Promise<EzcordRoom | null> 
   return data.rooms.find((room) => room.id === roomId) || null;
 }
 
+export async function updateEzcordRoomSettings(
+  room: EzcordRoom,
+  actorId: string,
+  params: { name: string; game: EzcordRoomGame; goal: EzcordRoomGoal },
+): Promise<EzcordRoom> {
+  if (room.createdBy !== actorId) {
+    throw createError({ statusCode: 403, message: "Изменять комнату может только администратор" });
+  }
+
+  const name = params.name.trim();
+  if (!name) {
+    throw createError({ statusCode: 400, message: "Введите название комнаты" });
+  }
+
+  if (!("voicechat" === params.game || "cs2" === params.game || "dota2" === params.game || "brawl_stars" === params.game)) {
+    throw createError({ statusCode: 400, message: "Неверная игра" });
+  }
+
+  if (!(params.goal === "result" || params.goal === "communication")) {
+    throw createError({ statusCode: 400, message: "Неверная цель комнаты" });
+  }
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const result = await pool.query(
+      `update ezcord_rooms
+          set name = $1,
+              game = $2,
+              goal = $3
+        where id = $4 and created_by = $5
+      returning *`,
+      [name, params.game, params.goal, room.id, actorId],
+    );
+    return result.rows[0] ? rowToRoom(result.rows[0]) : { ...room, name, game: params.game, goal: params.goal };
+  }
+
+  const data = readEzcordData();
+  const storedRoom = data.rooms.find((item) => item.id === room.id && item.createdBy === actorId);
+  if (!storedRoom) {
+    throw createError({ statusCode: 404, message: "Комната не найдена" });
+  }
+
+  storedRoom.name = name;
+  storedRoom.game = params.game;
+  storedRoom.goal = params.goal;
+  writeEzcordData(data);
+  return storedRoom;
+}
+
 export function roomInviteUrl(room: EzcordRoom): string {
   const baseUrl = getEzcordEnv("EZCORD_WEBAPP_URL") || "https://rocketseven.ru/ezcord";
   if (!room.inviteCode) return `${baseUrl}?room=${room.id}`;
@@ -576,7 +653,7 @@ export async function requireRoomAccess(event: H3Event): Promise<{ user: EzcordU
   return { user, room, inviteCode };
 }
 
-export async function touchEzcordPeer(roomId: string, peerId: string, user: EzcordUser): Promise<EzcordPeer[]> {
+export async function touchEzcordPeer(roomId: string, peerId: string, user: EzcordUser): Promise<EzcordPresenceState> {
   if (await isUserKickedFromRoom(roomId, user.id)) {
     throw createError({ statusCode: 403, message: "Вас кикнули из этой комнаты" });
   }
@@ -604,11 +681,27 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
     if (!exists) {
       const count = await redis.hlen(key);
       if (count >= EZCORD_MAX_ROOM_PARTICIPANTS) {
-        throw createError({ statusCode: 409, message: `Комната заполнена: максимум ${EZCORD_MAX_ROOM_PARTICIPANTS} участников` });
+        await redis.hset(waitingPeersKey(roomId), user.id, JSON.stringify({
+          roomId,
+          peerId,
+          userId: user.id,
+          displayName: user.displayName,
+          queuedAt: new Date().toISOString(),
+        } satisfies EzcordWaitingPeer));
+        return {
+          peers: await listEzcordPeers(roomId, peerId),
+          waiting: true,
+          waitingCount: await redis.hlen(waitingPeersKey(roomId)),
+        };
       }
     }
+    await redis.hdel(waitingPeersKey(roomId), user.id);
     await redis.hset(key, peerId, JSON.stringify(peer));
-    return await listEzcordPeers(roomId, peerId);
+    return {
+      peers: await listEzcordPeers(roomId, peerId),
+      waiting: false,
+      waitingCount: await redis.hlen(waitingPeersKey(roomId)),
+    };
   }
 
   const data = readEzcordData();
@@ -621,6 +714,7 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
     );
   }
 
+  data.waitingPeers = data.waitingPeers.filter((item) => !(item.roomId === roomId && item.userId === user.id));
   const existingPeer = data.peers.find((item) => item.roomId === roomId && item.peerId === peerId);
   if (existingPeer) {
     existingPeer.displayName = user.displayName;
@@ -628,12 +722,37 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
   } else {
     const roomPeers = data.peers.filter((item) => item.roomId === roomId);
     if (roomPeers.length >= EZCORD_MAX_ROOM_PARTICIPANTS) {
-      throw createError({ statusCode: 409, message: `Комната заполнена: максимум ${EZCORD_MAX_ROOM_PARTICIPANTS} участников` });
+      data.waitingPeers.push({
+        roomId,
+        peerId,
+        userId: user.id,
+        displayName: user.displayName,
+        queuedAt: new Date().toISOString(),
+      });
+      writeEzcordData(data);
+      return {
+        peers: data.peers.filter((item) => item.roomId === roomId && item.peerId !== peerId),
+        waiting: true,
+        waitingCount: data.waitingPeers.filter((item) => item.roomId === roomId).length,
+      };
     }
     data.peers.push(peer);
   }
   writeEzcordData(data);
-  return data.peers.filter((item) => item.roomId === roomId && item.peerId !== peerId);
+  return {
+    peers: data.peers.filter((item) => item.roomId === roomId && item.peerId !== peerId),
+    waiting: false,
+    waitingCount: data.waitingPeers.filter((item) => item.roomId === roomId).length,
+  };
+}
+
+export async function getEzcordWaitingCount(roomId: string): Promise<number> {
+  if (useRedisLiveState()) {
+    const redis = await getRedis();
+    return await redis.hlen(waitingPeersKey(roomId));
+  }
+
+  return readEzcordData().waitingPeers.filter((item) => item.roomId === roomId).length;
 }
 
 export async function listEzcordPeers(roomId: string, excludePeerId = ""): Promise<EzcordPeer[]> {
@@ -663,12 +782,14 @@ export async function leaveEzcordPeer(roomId: string, peerId: string, userId: st
         await redis.hdel(roomPeersKey(roomId), peerId);
       }
     }
+    await redis.hdel(waitingPeersKey(roomId), userId);
     await deleteSignalKeys(roomId, peerId);
     return;
   }
 
   const data = readEzcordData();
   data.peers = data.peers.filter((peer) => !(peer.roomId === roomId && peer.peerId === peerId && peer.userId === userId));
+  data.waitingPeers = data.waitingPeers.filter((peer) => !(peer.roomId === roomId && peer.peerId === peerId && peer.userId === userId));
   data.signals = data.signals.filter((signal) => signal.roomId !== roomId || (signal.fromPeerId !== peerId && signal.toPeerId !== peerId));
   writeEzcordData(data);
 }
@@ -1052,12 +1173,17 @@ async function ensurePgSchema(pool: any): Promise<void> {
         id text primary key,
         name text not null,
         access text not null,
+        game text not null default 'voicechat',
+        goal text not null default 'communication',
         invite_code text,
         telegram_chat_id text,
         created_by text not null references ezcord_users(id) on delete cascade,
         created_at timestamptz not null,
         closed_at timestamptz
       );
+
+      alter table ezcord_rooms add column if not exists game text not null default 'voicechat';
+      alter table ezcord_rooms add column if not exists goal text not null default 'communication';
 
       create table if not exists ezcord_kicked_peers (
         room_id text not null references ezcord_rooms(id) on delete cascade,
@@ -1118,10 +1244,10 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
 
     for (const room of data.rooms) {
       await pool.query(
-        `insert into ezcord_rooms (id, name, access, invite_code, telegram_chat_id, created_by, created_at, closed_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)
+        `insert into ezcord_rooms (id, name, access, game, goal, invite_code, telegram_chat_id, created_by, created_at, closed_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          on conflict (id) do nothing`,
-        [room.id, room.name, room.access, room.inviteCode, room.telegramChatId, room.createdBy, room.createdAt, room.closedAt],
+        [room.id, room.name, room.access, room.game, room.goal, room.inviteCode, room.telegramChatId, room.createdBy, room.createdAt, room.closedAt],
       ).catch(() => {});
     }
 
@@ -1168,6 +1294,8 @@ function rowToRoom(row: any): EzcordRoom {
     id: row.id,
     name: row.name,
     access: row.access,
+    game: row.game || "voicechat",
+    goal: row.goal || "communication",
     inviteCode: row.invite_code || undefined,
     telegramChatId: row.telegram_chat_id || undefined,
     createdBy: row.created_by,
@@ -1312,6 +1440,10 @@ async function scanKeys(pattern: string): Promise<string[]> {
 
 function roomPeersKey(roomId: string): string {
   return `ezcord:room:${roomId}:peers`;
+}
+
+function waitingPeersKey(roomId: string): string {
+  return `ezcord:room:${roomId}:waiting`;
 }
 
 function peerSignalsKey(roomId: string, peerId: string): string {

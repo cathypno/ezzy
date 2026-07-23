@@ -4,7 +4,7 @@ import EzcordAuthScreen from "~/components/ezcord/EzcordAuthScreen.vue";
 import EzcordHeader from "~/components/ezcord/EzcordHeader.vue";
 import EzcordRoomScreen from "~/components/ezcord/EzcordRoomScreen.vue";
 import { useEzcordVoice } from "~/composables/useEzcordVoice";
-import type { Room, User } from "~/types/ezcord";
+import type { Room, RoomGame, RoomGoal, User } from "~/types/ezcord";
 import { getInitials } from "~/utils/ezcord";
 
 const route = useRoute();
@@ -22,6 +22,7 @@ const isLoading = ref(false);
 const isBooting = ref(true);
 const copiedRoomId = ref("");
 const theme = ref<"light" | "dark">("light");
+const isRoomSettingsSaving = ref(false);
 
 const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : ""));
 const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : ""));
@@ -44,6 +45,8 @@ const mockRoom: Room = {
   id: "ui-room",
   name: "Вечерний подкаст",
   access: "public",
+  game: "voicechat",
+  goal: "communication",
   inviteUrl: "http://localhost:3100/ezcord?room=ui-room&invite=ui-demo",
   createdBy: mockUser.id,
 };
@@ -55,15 +58,9 @@ const mockPeers = [
 const mockMicOn = ref(false);
 const mockMicLevel = ref(68);
 
-const participantCount = computed(() => peers.value.length + (user.value ? 1 : 0));
-const connectedCount = computed(() => (isUiMode.value ? peers.value.length : connectedPeerIds.value.length));
-const visibleMicOn = computed(() => (isUiMode.value ? mockMicOn.value : isMicOn.value));
-const visibleMicLevel = computed(() => (isUiMode.value ? mockMicLevel.value : micLevel.value));
-const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
-const themeLabel = computed(() => (theme.value === "light" ? "Включить темную тему" : "Включить светлую тему"));
-
 const {
   connectedPeerIds,
+  isWaiting,
   isMicOn,
   kickPeer,
   leaveActiveRoom,
@@ -74,6 +71,7 @@ const {
   setAudioSink,
   startSignaling,
   toggleMic,
+  waitingCount,
 } = useEzcordVoice({
   activeRoom,
   user,
@@ -81,6 +79,13 @@ const {
   errorMessage,
   statusMessage,
 });
+
+const participantCount = computed(() => peers.value.length + (isWaiting.value ? 0 : user.value ? 1 : 0));
+const connectedCount = computed(() => (isUiMode.value ? peers.value.length : connectedPeerIds.value.length));
+const visibleMicOn = computed(() => (isUiMode.value ? mockMicOn.value : isMicOn.value));
+const visibleMicLevel = computed(() => (isUiMode.value ? mockMicLevel.value : micLevel.value));
+const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
+const themeLabel = computed(() => (theme.value === "light" ? "Включить темную тему" : "Включить светлую тему"));
 
 async function fetchMe() {
   const response = await $fetch<{ user: User | null }>("/api/ezcord/auth/me");
@@ -245,6 +250,30 @@ function handleKickPeer(peerId: string) {
   statusMessage.value = "Участник удален из тестовой комнаты";
 }
 
+async function updateRoomSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }) {
+  if (!activeRoom.value || !user.value) return;
+
+  errorMessage.value = "";
+  isRoomSettingsSaving.value = true;
+
+  try {
+    if (isUiMode.value) {
+      activeRoom.value = { ...activeRoom.value, ...settings };
+    } else {
+      const response = await $fetch<{ room: Room }>(`/api/ezcord/rooms/${activeRoom.value.id}`, {
+        method: "PATCH",
+        body: settings,
+      });
+      activeRoom.value = response.room;
+    }
+    statusMessage.value = "Настройки комнаты сохранены";
+  } catch (error: any) {
+    errorMessage.value = error?.data?.message || "Не получилось сохранить настройки";
+  } finally {
+    isRoomSettingsSaving.value = false;
+  }
+}
+
 async function copyInvite(room: Room) {
   if (!room.inviteUrl) {
     errorMessage.value = "Ссылка приглашения недоступна";
@@ -401,6 +430,8 @@ useHead({
         :copied="copiedRoomId === activeRoom.id"
         :error-message="errorMessage"
         :is-mic-on="visibleMicOn"
+        :is-room-settings-saving="isRoomSettingsSaving"
+        :is-waiting="isUiMode ? false : isWaiting"
         :max-room-participants="maxRoomParticipants"
         :mic-level="visibleMicLevel"
         :participant-count="participantCount"
@@ -410,10 +441,12 @@ useHead({
         :status-message="statusMessage"
         :user-id="user.id"
         :user-initial="userInitial"
+        :waiting-count="isUiMode ? 0 : waitingCount"
         :wave-bars="waveBars"
         @invite="copyInvite(activeRoom)"
         @kick="handleKickPeer"
         @toggle-mic="handleToggleMic"
+        @update-room="updateRoomSettings"
       />
     </div>
   </main>

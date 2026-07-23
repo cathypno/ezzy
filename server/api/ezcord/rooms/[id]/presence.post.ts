@@ -9,6 +9,5 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "Нет peerId" });
   }
 
-  const peers = await touchEzcordPeer(room.id, peerId, user);
-  return { peers };
+  return await touchEzcordPeer(room.id, peerId, user);
 });

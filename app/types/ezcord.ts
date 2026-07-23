@@ -1,4 +1,6 @@
 export type Access = "public" | "private" | "telegram_chat";
+export type RoomGame = "voicechat" | "cs2" | "dota2" | "brawl_stars";
+export type RoomGoal = "result" | "communication";
 
 export interface User {
   id: string;
@@ -17,6 +19,8 @@ export interface Room {
   id: string;
   name: string;
   access: Access;
+  game: RoomGame;
+  goal: RoomGoal;
   inviteUrl?: string;
   telegramChatId?: string;
   createdBy: string;

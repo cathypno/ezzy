@@ -5,6 +5,7 @@ import { getInitials } from "~/utils/ezcord";
 const props = defineProps<{
   copied: boolean;
   isMicOn: boolean;
+  isWaiting: boolean;
   micLevel: number;
   peers: Peer[];
   room: Room;
@@ -47,10 +48,10 @@ const accessGlyphs: Record<Room["access"], string> = {
 
     <div class="ez-participants">
       <div class="ez-peer">
-        <div class="ez-peer-circle ez-peer-circle--self">
+        <div class="ez-peer-circle ez-peer-circle--self" :class="{ 'ez-peer-circle--waiting': props.isWaiting }">
           {{ props.userInitial }}
         </div>
-        <p class="ez-peer-label">вы</p>
+        <p class="ez-peer-label">{{ props.isWaiting ? "в ожидании" : "вы" }}</p>
       </div>
 
       <div v-for="peer in props.peers" :key="peer.peerId" class="ez-peer">
@@ -104,8 +105,10 @@ const accessGlyphs: Record<Room["access"], string> = {
         </div>
         <button
           class="ez-mic"
-          :class="{ 'ez-mic--on': props.isMicOn }"
+          :class="{ 'ez-mic--on': props.isMicOn, 'ez-mic--disabled': props.isWaiting }"
+          :disabled="props.isWaiting"
           type="button"
+          :title="props.isWaiting ? 'Место освободится — вы в очереди' : 'Переключить микрофон'"
           @click="$emit('toggle-mic')"
         >
           <svg

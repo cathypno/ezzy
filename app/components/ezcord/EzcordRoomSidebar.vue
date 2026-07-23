@@ -5,10 +5,12 @@ const props = defineProps<{
   connectedCount: number;
   copied: boolean;
   errorMessage: string;
+  isWaiting: boolean;
   maxRoomParticipants: number;
   participantCount: number;
   room: Room;
   statusMessage: string;
+  waitingCount: number;
 }>();
 
 defineEmits<{
@@ -23,8 +25,10 @@ defineEmits<{
       <p class="ez-stat-value">
         {{ props.participantCount }}/{{ props.maxRoomParticipants }}
       </p>
+      <p v-if="props.waitingCount" class="ez-waiting-count">
+        В ожидании: {{ props.waitingCount }}
+      </p>
     </div>
-
     <button
       v-if="props.room.inviteUrl"
       class="ez-secondary"
@@ -33,6 +37,9 @@ defineEmits<{
     >
       {{ props.copied ? "Скопировано" : "Пригласить" }}
     </button>
+    <p v-if="props.isWaiting" class="ez-alert ez-alert--waiting">
+      Вы в ожидании свободного места
+    </p>
     <p v-if="props.errorMessage" class="ez-alert ez-alert--error">
       {{ props.errorMessage }}
     </p>

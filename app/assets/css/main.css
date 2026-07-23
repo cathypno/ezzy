@@ -813,6 +813,60 @@ button {
   line-height: 1;
 }
 
+.ez-room-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ez-room-edit-btn {
+  display: grid;
+  height: 40px;
+  width: 40px;
+  flex-shrink: 0;
+  place-items: center;
+  margin-top: 20px;
+  border: 1px solid var(--ez-line);
+  border-radius: 12px;
+  background: var(--ez-card);
+  color: var(--ez-muted);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  box-shadow: var(--ez-shadow);
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.ez-room-edit-btn:hover {
+  border-color: color-mix(in srgb, var(--ez-green) 55%, var(--ez-line));
+  color: var(--ez-green-dark);
+  transform: translateY(-1px);
+}
+
+.ez-room-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ez-room-meta span {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid var(--ez-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ez-card) 72%, transparent);
+  color: var(--ez-muted);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .ez-room-grid {
   margin-top: 20px;
   display: grid;
@@ -894,6 +948,13 @@ button {
   background: var(--ez-green);
   color: #082900;
   box-shadow: 0 0 26px color-mix(in srgb, var(--ez-green) 42%, transparent);
+}
+
+.ez-peer-circle--waiting {
+  border-style: dashed;
+  background: var(--ez-widget-field);
+  color: var(--ez-widget-muted);
+  box-shadow: none;
 }
 
 .ez-kick {
@@ -982,6 +1043,13 @@ button {
   box-shadow: 0 0 38px color-mix(in srgb, var(--ez-green) 66%, transparent);
 }
 
+.ez-mic--disabled,
+.ez-mic--disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
 .ez-stat-card {
   padding: 18px;
 }
@@ -1002,6 +1070,13 @@ button {
   font-size: 38px;
   font-weight: 900;
   line-height: 1;
+}
+
+.ez-waiting-count {
+  margin-top: 10px;
+  color: var(--ez-green-dark);
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .ez-alert {
@@ -1029,6 +1104,80 @@ button {
   border-color: color-mix(in srgb, var(--ez-green) 34%, transparent);
   background: var(--ez-green-soft);
   color: var(--ez-green-dark);
+}
+
+.ez-alert--waiting {
+  border-color: color-mix(in srgb, var(--ez-blue) 34%, transparent);
+  background: var(--ez-blue-soft);
+  color: color-mix(in srgb, var(--ez-blue) 78%, var(--ez-ink));
+}
+
+.ez-modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 8, 5, 0.56);
+  padding: 20px;
+  backdrop-filter: blur(8px);
+}
+
+.ez-modal {
+  width: min(460px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  border: 1px solid var(--ez-line);
+  border-radius: 18px;
+  background: var(--ez-card);
+  box-shadow: 0 28px 70px -30px rgba(0, 0, 0, 0.72);
+  padding: 22px;
+}
+
+.ez-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ez-modal-title {
+  margin-top: 8px;
+  color: var(--ez-ink);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.ez-modal-close {
+  display: grid;
+  height: 34px;
+  width: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-field);
+  color: var(--ez-muted);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ez-room-settings-form {
+  margin-top: 22px;
+}
+
+.ez-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.ez-modal-actions .ez-primary,
+.ez-modal-actions .ez-secondary {
+  min-width: 120px;
 }
 
 @media (max-width: 1024px) {
@@ -1095,6 +1244,14 @@ button {
     font-size: 32px;
   }
 
+  .ez-room-heading-row {
+    gap: 12px;
+  }
+
+  .ez-room-edit-btn {
+    margin-top: 16px;
+  }
+
   .ez-room-stage,
   .ez-panel {
     padding: 18px;
@@ -1107,6 +1264,16 @@ button {
   .ez-mic {
     height: 78px;
     width: 78px;
+  }
+
+  .ez-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ez-modal-actions .ez-primary,
+  .ez-modal-actions .ez-secondary {
+    min-width: 0;
   }
 
   .ez-auth-shell--compact {

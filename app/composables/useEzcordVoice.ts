@@ -12,6 +12,8 @@ interface UseEzcordVoiceOptions {
 export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusMessage }: UseEzcordVoiceOptions) {
   const isMicOn = ref(false);
   const micLevel = ref(0);
+  const isWaiting = ref(false);
+  const waitingCount = ref(0);
   const localPeerId = ref("");
   const peers = ref<Peer[]>([]);
   const connectedPeerIds = ref<string[]>([]);
@@ -30,6 +32,11 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
   const remoteAudios = new Map<string, HTMLAudioElement>();
 
   async function toggleMic() {
+    if (isWaiting.value) {
+      statusMessage.value = "Место освободится — вы в очереди";
+      return;
+    }
+
     if (isMicOn.value) {
       stopMic();
       return;
@@ -94,6 +101,8 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     localPeerId.value = getRoomPeerId(activeRoom.value.id, user.value?.id || "user");
     peers.value = [];
     connectedPeerIds.value = [];
+    isWaiting.value = false;
+    waitingCount.value = 0;
     lastSignalAt = "";
     isLeavingRoom = false;
 
@@ -146,6 +155,8 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     remoteAudios.clear();
     peers.value = [];
     connectedPeerIds.value = [];
+    isWaiting.value = false;
+    waitingCount.value = 0;
     localPeerId.value = "";
     lastSignalAt = "";
   }
@@ -175,9 +186,9 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
   async function announcePresence() {
     if (!activeRoom.value || !localPeerId.value) return;
 
-    let response: { peers: Peer[] };
+    let response: { peers: Peer[]; waiting: boolean; waitingCount: number };
     try {
-      response = await $fetch<{ peers: Peer[] }>(roomApiPath("presence"), {
+      response = await $fetch<{ peers: Peer[]; waiting: boolean; waitingCount: number }>(roomApiPath("presence"), {
         method: "POST",
         body: { peerId: localPeerId.value },
       });
@@ -188,6 +199,8 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
       return;
     }
 
+    isWaiting.value = response.waiting;
+    waitingCount.value = response.waitingCount;
     await syncPeers(response.peers);
   }
 
@@ -274,7 +287,37 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     }
 
     if (message.type === "peers") {
+      isWaiting.value = Boolean(message.waiting);
+      waitingCount.value = Number(message.waitingCount || 0);
       await syncPeers(message.peers || []);
+      return;
+    }
+
+    if (message.type === "room_settings" && message.room) {
+      if (activeRoom.value) {
+        activeRoom.value = {
+          ...activeRoom.value,
+          name: message.room.name,
+          game: message.room.game,
+          goal: message.room.goal,
+        };
+      }
+      return;
+    }
+
+    if (message.type === "slot_available") {
+      if (roomSocket?.readyState === WebSocket.OPEN) {
+        roomSocket.send(JSON.stringify({ type: "ping" }));
+      }
+      return;
+    }
+
+    if (message.type === "ready" || message.type === "waiting") {
+      isWaiting.value = Boolean(message.waiting);
+      waitingCount.value = Number(message.waitingCount || 0);
+      if (isWaiting.value) {
+        await syncPeers(peers.value);
+      }
       return;
     }
 
@@ -307,6 +350,13 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     const visiblePeers = normalizeRemotePeers(remotePeers);
     peers.value = visiblePeers;
     const remoteIds = new Set(visiblePeers.map((peer) => peer.peerId));
+
+    if (isWaiting.value) {
+      for (const peerId of Array.from(peerConnections.keys())) {
+        closePeer(peerId);
+      }
+      return;
+    }
 
     for (const peer of visiblePeers) {
       await ensurePeerConnection(peer.peerId, localPeerId.value < peer.peerId);
@@ -556,6 +606,7 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
 
   return {
     connectedPeerIds,
+    isWaiting,
     isMicOn,
     kickPeer,
     leaveActiveRoom,
@@ -566,5 +617,6 @@ export function useEzcordVoice({ activeRoom, user, invite, errorMessage, statusM
     setAudioSink,
     startSignaling,
     toggleMic,
+    waitingCount,
   };
 }
