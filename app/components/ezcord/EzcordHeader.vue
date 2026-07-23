@@ -58,7 +58,7 @@ function openLobby() {
           @click="rewardsOpen = !rewardsOpen"
         >
           <span class="grid min-w-[74px] leading-none max-[760px]:min-w-[62px]">
-            <span class="flex items-center gap-1.5 text-[26px] font-black text-[#ffd447] max-[760px]:text-[22px]">{{ formatEzcordPoints(user.points) }}</span>
+            <span class="flex items-center gap-1.5 text-[26px] font-black text-ez-green max-[760px]:text-[22px]">{{ formatEzcordPoints(user.points) }}</span>
             <span class="mt-1 text-[11px] font-black uppercase tracking-[0.08em] text-ez-muted max-[760px]:text-[10px]">Level {{ getEzcordLevel(user.points) }}</span>
           </span>
           <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[12px] border border-[#ffd447]/25 bg-[#ffd447]/10 text-[21px] text-[#ffd447] max-[760px]:h-8 max-[760px]:w-8" aria-hidden="true">
