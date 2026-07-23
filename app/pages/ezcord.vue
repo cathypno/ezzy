@@ -1,127 +1,59 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-
-type Access = "public" | "private" | "telegram_chat";
-
-interface User {
-  id: string;
-  email: string;
-  displayName: string;
-  telegram?: {
-    id: number;
-    username?: string;
-    firstName?: string;
-    lastName?: string;
-    photoUrl?: string;
-  };
-}
-
-interface Room {
-  id: string;
-  name: string;
-  access: Access;
-  inviteUrl?: string;
-  telegramChatId?: string;
-  createdBy: string;
-}
-
-interface Peer {
-  peerId: string;
-  userId?: string;
-  displayName: string;
-  lastSeenAt: string;
-}
-
-interface SignalMessage {
-  id: string;
-  fromPeerId: string;
-  toPeerId: string;
-  type: "offer" | "answer" | "candidate";
-  payload: any;
-  createdAt: string;
-}
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import EzcordAuthScreen from "~/components/ezcord/EzcordAuthScreen.vue";
+import EzcordHeader from "~/components/ezcord/EzcordHeader.vue";
+import EzcordRoomScreen from "~/components/ezcord/EzcordRoomScreen.vue";
+import { useEzcordVoice } from "~/composables/useEzcordVoice";
+import type { Room, User } from "~/types/ezcord";
+import { getInitials } from "~/utils/ezcord";
 
 const route = useRoute();
 
 const user = ref<User | null>(null);
-const rooms = ref<Room[]>([]);
 const activeRoom = ref<Room | null>(null);
 const authMode = ref<"login" | "register">("register");
 const email = ref("");
 const password = ref("");
 const displayName = ref("");
-const roomName = ref("Голосовая");
-const roomAccess = ref<Access>("public");
-const telegramChatId = ref("");
 const statusMessage = ref("");
 const errorMessage = ref("");
 const isLoading = ref(false);
 const isBooting = ref(true);
-const isMicOn = ref(false);
-const micLevel = ref(0);
-const voiceReady = ref(false);
 const copiedRoomId = ref("");
-const localPeerId = ref("");
-const peers = ref<Peer[]>([]);
-const connectedPeerIds = ref<string[]>([]);
-const audioSink = ref<HTMLElement | null>(null);
-const accountEmail = ref("");
-const accountPassword = ref("");
-const accountDisplayName = ref("");
 const theme = ref<"light" | "dark">("light");
-
-let mediaStream: MediaStream | null = null;
-let animationFrame = 0;
-let presenceTimer = 0;
-let signalTimer = 0;
-let wsPingTimer = 0;
-let wsFallbackTimer = 0;
-let lastSignalAt = "";
-let roomSocket: WebSocket | null = null;
-let isLeavingRoom = false;
-const peerConnections = new Map<string, RTCPeerConnection>();
-const remoteAudios = new Map<string, HTMLAudioElement>();
 
 const roomFromQuery = computed(() => (typeof route.query.room === "string" ? route.query.room : ""));
 const inviteFromQuery = computed(() => (typeof route.query.invite === "string" ? route.query.invite : ""));
-
-const telegramName = computed(() => {
-  const telegram = user.value?.telegram;
-  if (!telegram) return "";
-  return telegram.username ? `@${telegram.username}` : [telegram.firstName, telegram.lastName].filter(Boolean).join(" ");
-});
-
-const accessLabels: Record<Access, string> = {
-  public: "Открытая",
-  private: "Приватная",
-  telegram_chat: "Telegram-чат",
-};
-
-const accessGlyphs: Record<Access, string> = {
-  public: "PUB",
-  private: "INV",
-  telegram_chat: "TG",
-};
-
 const waveBars = [18, 30, 46, 26, 58, 74, 34, 50, 24, 62, 40, 22];
 const maxRoomParticipants = 5;
+
 const participantCount = computed(() => peers.value.length + (user.value ? 1 : 0));
-const connectedCount = computed(() => connectedPeerIds.value.length);
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
-const hasEmail = computed(() => Boolean(user.value?.email));
-const publicRoomCount = computed(() => rooms.value.filter((room) => room.access === "public").length);
-const privateRoomCount = computed(() => rooms.value.filter((room) => room.access === "private").length);
-const telegramRoomCount = computed(() => rooms.value.filter((room) => room.access === "telegram_chat").length);
 const themeLabel = computed(() => (theme.value === "light" ? "Включить темную тему" : "Включить светлую тему"));
+
+const {
+  connectedPeerIds,
+  isMicOn,
+  kickPeer,
+  leaveActiveRoom,
+  beaconLeaveActiveRoom,
+  cleanupVoice,
+  micLevel,
+  peers,
+  setAudioSink,
+  startSignaling,
+  toggleMic,
+} = useEzcordVoice({
+  activeRoom,
+  user,
+  invite: inviteFromQuery,
+  errorMessage,
+  statusMessage,
+});
 
 async function fetchMe() {
   const response = await $fetch<{ user: User | null }>("/api/ezcord/auth/me");
   user.value = response.user;
-}
-
-async function fetchRooms() {
-  const response = await $fetch<{ rooms: Room[] }>("/api/ezcord/rooms");
-  rooms.value = response.rooms;
 }
 
 async function submitAuth() {
@@ -160,37 +92,10 @@ async function authenticateTelegram() {
       body: { initData },
     });
     user.value = response.user;
-    statusMessage.value = "Вы вошли через Telegram";
     return true;
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось войти через Telegram";
     return false;
-  }
-}
-
-async function attachEmailAccount() {
-  errorMessage.value = "";
-  statusMessage.value = "";
-  isLoading.value = true;
-
-  try {
-    const response = await $fetch<{ user: User }>("/api/ezcord/auth/email", {
-      method: "POST",
-      body: {
-        email: accountEmail.value,
-        password: accountPassword.value,
-        displayName: accountDisplayName.value,
-      },
-    });
-    user.value = response.user;
-    accountEmail.value = "";
-    accountPassword.value = "";
-    accountDisplayName.value = user.value.displayName;
-    statusMessage.value = "Email привязан";
-  } catch (error: any) {
-    errorMessage.value = error?.data?.message || "Не получилось привязать email";
-  } finally {
-    isLoading.value = false;
   }
 }
 
@@ -200,65 +105,11 @@ async function logout() {
   await $fetch("/api/ezcord/auth/logout", { method: "POST" });
   user.value = null;
   activeRoom.value = null;
-  rooms.value = [];
-}
-
-async function linkTelegram() {
-  errorMessage.value = "";
-  statusMessage.value = "";
-  const initData = getTelegramInitData();
-
-  if (!initData) {
-    errorMessage.value = "Откройте эту страницу внутри Telegram Mini App";
-    return;
-  }
-
-  try {
-    await $fetch("/api/ezcord/telegram/link", {
-      method: "POST",
-      body: { initData },
-    });
-    await fetchMe();
-    statusMessage.value = "Telegram привязан";
-  } catch (error: any) {
-    errorMessage.value = error?.data?.message || "Не получилось привязать Telegram";
-  }
 }
 
 function toggleTheme() {
   theme.value = theme.value === "light" ? "dark" : "light";
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem("ezcord-theme", theme.value);
-  }
-}
-
-async function createRoom() {
-  errorMessage.value = "";
-  statusMessage.value = "";
-  isLoading.value = true;
-
-  try {
-    const response = await $fetch<{ room: Room }>("/api/ezcord/rooms", {
-      method: "POST",
-      body: {
-        name: roomName.value,
-        access: roomAccess.value,
-        telegramChatId: telegramChatId.value,
-      },
-    });
-
-    rooms.value = [response.room, ...rooms.value.filter((room) => room.id !== response.room.id)];
-    activeRoom.value = response.room;
-    voiceReady.value = true;
-    startSignaling();
-    await nextTick();
-    scrollToAppTop();
-    statusMessage.value = "Комната создана";
-  } catch (error: any) {
-    errorMessage.value = error?.data?.message || "Не получилось создать комнату";
-  } finally {
-    isLoading.value = false;
-  }
+  window.localStorage.setItem("ezcord-theme", theme.value);
 }
 
 async function enterStartRoom() {
@@ -281,15 +132,11 @@ async function openHomeRoom() {
 
   await leaveActiveRoom();
   cleanupVoice();
-  isLeavingRoom = false;
 
   try {
     const response = await $fetch<{ room: Room }>("/api/ezcord/rooms/home");
-    rooms.value = [response.room, ...rooms.value.filter((room) => room.id !== response.room.id)];
     activeRoom.value = response.room;
-    voiceReady.value = true;
     startSignaling();
-    await nextTick();
     scrollToAppTop();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось открыть комнату";
@@ -303,27 +150,16 @@ async function openRoom(roomId: string, invite = "") {
   statusMessage.value = "";
   await leaveActiveRoom();
   cleanupVoice();
-  isLeavingRoom = false;
 
   try {
     const query = invite ? `?invite=${encodeURIComponent(invite)}` : "";
-    const response = await $fetch<{ room: Room; voice: { ready: boolean } }>(`/api/ezcord/rooms/${roomId}${query}`);
+    const response = await $fetch<{ room: Room }>(`/api/ezcord/rooms/${roomId}${query}`);
     activeRoom.value = response.room;
-    voiceReady.value = response.voice.ready;
     startSignaling();
-    await nextTick();
     scrollToAppTop();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Нет доступа к комнате";
   }
-}
-
-async function exitRoom() {
-  await leaveActiveRoom();
-  activeRoom.value = null;
-  cleanupVoice();
-  await nextTick();
-  await openHomeRoom();
 }
 
 async function copyInvite(room: Room) {
@@ -332,14 +168,13 @@ async function copyInvite(room: Room) {
     return;
   }
 
-  errorMessage.value = "";
-
   const copied = await writeClipboardText(room.inviteUrl);
   if (!copied) {
     errorMessage.value = "Не получилось скопировать ссылку";
     return;
   }
 
+  errorMessage.value = "";
   copiedRoomId.value = room.id;
   statusMessage.value = "Ссылка приглашения скопирована";
   window.setTimeout(() => {
@@ -377,541 +212,6 @@ async function writeClipboardText(text: string) {
   }
 }
 
-async function toggleMic() {
-  if (isMicOn.value) {
-    stopMic();
-    return;
-  }
-
-  try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    isMicOn.value = true;
-    watchMicLevel(mediaStream);
-    await publishLocalTracks();
-  } catch {
-    errorMessage.value = "Микрофон недоступен";
-  }
-}
-
-function stopMic(shouldRenegotiate = true) {
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame);
-    animationFrame = 0;
-  }
-
-  mediaStream?.getTracks().forEach((track) => track.stop());
-  mediaStream = null;
-  isMicOn.value = false;
-  micLevel.value = 0;
-
-  for (const connection of peerConnections.values()) {
-    for (const sender of connection.getSenders()) {
-      if (sender.track?.kind === "audio") {
-        connection.removeTrack(sender);
-      }
-    }
-  }
-  if (shouldRenegotiate) {
-    void renegotiateAll();
-  }
-}
-
-function watchMicLevel(stream: MediaStream) {
-  const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
-  const audioContext = new AudioContextConstructor();
-  const analyser = audioContext.createAnalyser();
-  const source = audioContext.createMediaStreamSource(stream);
-  const samples = new Uint8Array(analyser.frequencyBinCount);
-
-  analyser.fftSize = 256;
-  source.connect(analyser);
-
-  const tick = () => {
-    analyser.getByteFrequencyData(samples);
-    const sum = samples.reduce((total, value) => total + value, 0);
-    micLevel.value = Math.min(100, Math.round((sum / samples.length) * 1.6));
-    animationFrame = requestAnimationFrame(tick);
-  };
-
-  tick();
-}
-
-function startSignaling() {
-  if (!activeRoom.value) return;
-
-  localPeerId.value = getRoomPeerId(activeRoom.value.id, user.value?.id || "user");
-  peers.value = [];
-  connectedPeerIds.value = [];
-  lastSignalAt = "";
-  isLeavingRoom = false;
-
-  if (typeof window !== "undefined" && "WebSocket" in window) {
-    startWebSocketSignaling();
-    return;
-  }
-
-  startPollingSignaling();
-}
-
-function startPollingSignaling() {
-  if (!activeRoom.value || !localPeerId.value) return;
-
-  void announcePresence();
-  void pollSignals();
-
-  presenceTimer = window.setInterval(() => void announcePresence(), 2500);
-  signalTimer = window.setInterval(() => void pollSignals(), 900);
-}
-
-function cleanupVoice() {
-  if (presenceTimer) {
-    window.clearInterval(presenceTimer);
-    presenceTimer = 0;
-  }
-  if (signalTimer) {
-    window.clearInterval(signalTimer);
-    signalTimer = 0;
-  }
-  if (wsPingTimer) {
-    window.clearInterval(wsPingTimer);
-    wsPingTimer = 0;
-  }
-  if (wsFallbackTimer) {
-    window.clearTimeout(wsFallbackTimer);
-    wsFallbackTimer = 0;
-  }
-
-  const socket = roomSocket;
-  roomSocket = null;
-  socket?.close(1000, "Cleanup");
-
-  stopMic(false);
-  for (const connection of peerConnections.values()) {
-    connection.close();
-  }
-  peerConnections.clear();
-  remoteAudios.forEach((audio) => audio.remove());
-  remoteAudios.clear();
-  peers.value = [];
-  connectedPeerIds.value = [];
-  localPeerId.value = "";
-  lastSignalAt = "";
-}
-
-async function leaveActiveRoom() {
-  if (!activeRoom.value || !localPeerId.value) return;
-
-  isLeavingRoom = true;
-  if (roomSocket?.readyState === WebSocket.OPEN) {
-    roomSocket.send(JSON.stringify({ type: "leave" }));
-    roomSocket.close(1000, "Leave");
-  }
-
-  await $fetch(roomApiPath("leave"), {
-    method: "POST",
-    body: { peerId: localPeerId.value },
-  }).catch(() => {});
-}
-
-function beaconLeaveActiveRoom() {
-  if (!activeRoom.value || !localPeerId.value || typeof navigator === "undefined" || !navigator.sendBeacon) return;
-
-  const body = new Blob([JSON.stringify({ peerId: localPeerId.value })], { type: "application/json" });
-  navigator.sendBeacon(roomApiPath("leave"), body);
-}
-
-async function announcePresence() {
-  if (!activeRoom.value || !localPeerId.value) return;
-
-  let response: { peers: Peer[] };
-  try {
-    response = await $fetch<{ peers: Peer[] }>(roomApiPath("presence"), {
-      method: "POST",
-      body: { peerId: localPeerId.value },
-    });
-  } catch (error: any) {
-    errorMessage.value = error?.data?.message || "Не получилось войти в комнату";
-    activeRoom.value = null;
-    cleanupVoice();
-    return;
-  }
-
-  await syncPeers(response.peers);
-}
-
-function startWebSocketSignaling() {
-  if (!activeRoom.value || !localPeerId.value) return;
-
-  let opened = false;
-  const socket = new WebSocket(roomWsPath());
-  roomSocket = socket;
-
-  wsFallbackTimer = window.setTimeout(() => {
-    if (opened || roomSocket !== socket) return;
-    roomSocket = null;
-    socket.close();
-    startPollingSignaling();
-  }, 3500);
-
-  socket.onopen = () => {
-    opened = true;
-    if (wsFallbackTimer) {
-      window.clearTimeout(wsFallbackTimer);
-      wsFallbackTimer = 0;
-    }
-    wsPingTimer = window.setInterval(() => {
-      if (roomSocket?.readyState === WebSocket.OPEN) {
-        roomSocket.send(JSON.stringify({ type: "ping" }));
-      }
-    }, 20000);
-  };
-
-  socket.onmessage = (event) => {
-    void handleSocketMessage(event);
-  };
-
-  socket.onerror = () => {
-    if (!opened && roomSocket === socket) {
-      roomSocket = null;
-      startPollingSignaling();
-    }
-  };
-
-  socket.onclose = (event) => {
-    if (wsPingTimer) {
-      window.clearInterval(wsPingTimer);
-      wsPingTimer = 0;
-    }
-    if (wsFallbackTimer) {
-      window.clearTimeout(wsFallbackTimer);
-      wsFallbackTimer = 0;
-    }
-    if (roomSocket === socket) {
-      roomSocket = null;
-    }
-
-    if (event.reason === "Replaced") {
-      statusMessage.value = "Открыто новое подключение";
-      activeRoom.value = null;
-      cleanupVoice();
-      return;
-    }
-
-    if (isLeavingRoom || !activeRoom.value) return;
-
-    if (event.code === 4003) {
-      errorMessage.value = "Вас кикнули из комнаты";
-      activeRoom.value = null;
-      cleanupVoice();
-      return;
-    }
-
-    if (!presenceTimer) {
-      statusMessage.value = "WebSocket недоступен, включен fallback";
-      startPollingSignaling();
-    }
-  };
-}
-
-async function handleSocketMessage(event: MessageEvent) {
-  let message: any;
-  try {
-    message = JSON.parse(String(event.data));
-  } catch {
-    return;
-  }
-
-  if (message.type === "peers") {
-    await syncPeers(message.peers || []);
-    return;
-  }
-
-  if (message.type === "signal" && message.signal) {
-    lastSignalAt = message.signal.createdAt || lastSignalAt;
-    await handleSignal(message.signal);
-    return;
-  }
-
-  if (message.type === "kicked") {
-    errorMessage.value = message.message || "Вас кикнули из комнаты";
-    activeRoom.value = null;
-    cleanupVoice();
-    return;
-  }
-
-  if (message.type === "replaced") {
-    statusMessage.value = message.message || "Открыто новое подключение";
-    activeRoom.value = null;
-    cleanupVoice();
-    return;
-  }
-
-  if (message.type === "error") {
-    errorMessage.value = message.message || "Ошибка голосовой комнаты";
-  }
-}
-
-async function syncPeers(remotePeers: Peer[]) {
-  const visiblePeers = normalizeRemotePeers(remotePeers);
-  peers.value = visiblePeers;
-  const remoteIds = new Set(visiblePeers.map((peer) => peer.peerId));
-
-  for (const peer of visiblePeers) {
-    await ensurePeerConnection(peer.peerId, localPeerId.value < peer.peerId);
-  }
-
-  for (const peerId of Array.from(peerConnections.keys())) {
-    if (!remoteIds.has(peerId)) {
-      closePeer(peerId);
-    }
-  }
-}
-
-async function kickPeer(peerId: string) {
-  if (!activeRoom.value) return;
-
-  try {
-    await $fetch(roomApiPath(`peers/${peerId}`), { method: "DELETE" });
-    closePeer(peerId);
-    peers.value = peers.value.filter((peer) => peer.peerId !== peerId);
-  } catch (error: any) {
-    errorMessage.value = error?.data?.message || "Не получилось кикнуть участника";
-  }
-}
-
-async function pollSignals() {
-  if (!activeRoom.value || !localPeerId.value) return;
-
-  const query = new URLSearchParams({ peerId: localPeerId.value });
-  if (lastSignalAt) query.set("after", lastSignalAt);
-  if (inviteFromQuery.value) query.set("invite", inviteFromQuery.value);
-
-  const response = await $fetch<{ signals: SignalMessage[] }>(`/api/ezcord/rooms/${activeRoom.value.id}/signals?${query}`);
-
-  for (const signal of response.signals) {
-    lastSignalAt = signal.createdAt;
-    await handleSignal(signal);
-  }
-}
-
-async function handleSignal(signal: SignalMessage) {
-  const connection = await ensurePeerConnection(signal.fromPeerId, false);
-
-  if (signal.type === "offer") {
-    await connection.setRemoteDescription(new RTCSessionDescription(signal.payload));
-    await addLocalTracks(connection);
-    const answer = await connection.createAnswer();
-    await connection.setLocalDescription(answer);
-    await sendSignal(signal.fromPeerId, "answer", answer);
-    return;
-  }
-
-  if (signal.type === "answer") {
-    if (connection.signalingState !== "stable") {
-      await connection.setRemoteDescription(new RTCSessionDescription(signal.payload));
-    }
-    return;
-  }
-
-  if (signal.type === "candidate") {
-    await connection.addIceCandidate(new RTCIceCandidate(signal.payload)).catch(() => {});
-  }
-}
-
-async function ensurePeerConnection(peerId: string, shouldOffer: boolean) {
-  const existing = peerConnections.get(peerId);
-  if (existing) return existing;
-
-  const connection = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-  });
-
-  peerConnections.set(peerId, connection);
-  if (mediaStream) {
-    await addLocalTracks(connection);
-  } else {
-    connection.addTransceiver("audio", { direction: "recvonly" });
-  }
-
-  connection.onicecandidate = (event) => {
-    if (event.candidate) {
-      void sendSignal(peerId, "candidate", event.candidate.toJSON());
-    }
-  };
-
-  connection.ontrack = (event) => {
-    const stream = event.streams[0];
-    if (stream) attachRemoteAudio(peerId, stream);
-  };
-
-  connection.onconnectionstatechange = () => updateConnectedPeers();
-
-  if (shouldOffer) {
-    await createOffer(peerId, connection);
-  }
-
-  return connection;
-}
-
-async function createOffer(peerId: string, connection = peerConnections.get(peerId)) {
-  if (!connection) return;
-  const offer = await connection.createOffer();
-  await connection.setLocalDescription(offer);
-  await sendSignal(peerId, "offer", offer);
-}
-
-async function sendSignal(toPeerId: string, type: SignalMessage["type"], payload: any) {
-  if (!activeRoom.value || !localPeerId.value) return;
-
-  if (roomSocket?.readyState === WebSocket.OPEN) {
-    roomSocket.send(
-      JSON.stringify({
-        type: "signal",
-        toPeerId,
-        signalType: type,
-        payload,
-      }),
-    );
-    return;
-  }
-
-  await $fetch(roomApiPath("signals"), {
-    method: "POST",
-    body: {
-      fromPeerId: localPeerId.value,
-      toPeerId,
-      type,
-      payload,
-    },
-  });
-}
-
-async function addLocalTracks(connection: RTCPeerConnection) {
-  if (!mediaStream) return;
-  const hasAudioSender = connection.getSenders().some((sender) => sender.track?.kind === "audio");
-  if (hasAudioSender) return;
-
-  const track = mediaStream.getAudioTracks()[0];
-  if (!track) return;
-
-  const idleTransceiver = connection
-    .getTransceivers()
-    .find((transceiver) => transceiver.receiver.track.kind === "audio" && !transceiver.sender.track);
-
-  if (idleTransceiver) {
-    await idleTransceiver.sender.replaceTrack(track);
-    idleTransceiver.direction = "sendrecv";
-  } else {
-    connection.addTrack(track, mediaStream);
-  }
-}
-
-async function publishLocalTracks() {
-  for (const [peerId, connection] of peerConnections.entries()) {
-    await addLocalTracks(connection);
-    await createOffer(peerId, connection);
-  }
-}
-
-async function renegotiateAll() {
-  for (const [peerId, connection] of peerConnections.entries()) {
-    if (connection.connectionState !== "closed") {
-      await createOffer(peerId, connection).catch(() => {});
-    }
-  }
-}
-
-function attachRemoteAudio(peerId: string, stream: MediaStream) {
-  let audio = remoteAudios.get(peerId);
-  if (!audio) {
-    audio = document.createElement("audio");
-    audio.autoplay = true;
-    audio.playsInline = true;
-    audio.dataset.peerId = peerId;
-    audioSink.value?.appendChild(audio);
-    remoteAudios.set(peerId, audio);
-  }
-  audio.srcObject = stream;
-}
-
-function closePeer(peerId: string) {
-  peerConnections.get(peerId)?.close();
-  peerConnections.delete(peerId);
-  remoteAudios.get(peerId)?.remove();
-  remoteAudios.delete(peerId);
-  updateConnectedPeers();
-}
-
-function updateConnectedPeers() {
-  connectedPeerIds.value = Array.from(peerConnections.entries())
-    .filter(([, connection]) => ["connected", "completed"].includes(connection.connectionState))
-    .map(([peerId]) => peerId);
-}
-
-function roomApiPath(action: string) {
-  if (!activeRoom.value) return "";
-  const query = inviteFromQuery.value ? `?invite=${encodeURIComponent(inviteFromQuery.value)}` : "";
-  return `/api/ezcord/rooms/${activeRoom.value.id}/${action}${query}`;
-}
-
-function roomWsPath() {
-  const query = new URLSearchParams({
-    roomId: activeRoom.value?.id || "",
-    peerId: localPeerId.value,
-  });
-  if (inviteFromQuery.value) query.set("invite", inviteFromQuery.value);
-
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${window.location.host}/api/ezcord/ws?${query.toString()}`;
-}
-
-function randomClientId() {
-  return `peer_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
-}
-
-function getRoomPeerId(roomId: string, userId: string) {
-  if (typeof window === "undefined") return randomClientId();
-
-  const key = `ezcord-peer:${userId}:${roomId}`;
-  const savedPeerId = window.localStorage.getItem(key);
-  if (savedPeerId) return savedPeerId;
-
-  const peerId = randomClientId();
-  window.localStorage.setItem(key, peerId);
-  return peerId;
-}
-
-function normalizeRemotePeers(remotePeers: Peer[]) {
-  const selfUserId = user.value?.id || "";
-  const latestByUser = new Map<string, Peer>();
-
-  for (const peer of remotePeers) {
-    if (selfUserId && peer.userId === selfUserId) continue;
-
-    const key = peer.userId || peer.peerId;
-    const existing = latestByUser.get(key);
-    if (!existing || new Date(peer.lastSeenAt).getTime() >= new Date(existing.lastSeenAt).getTime()) {
-      latestByUser.set(key, peer);
-    }
-  }
-
-  return Array.from(latestByUser.values());
-}
-
-function getInitials(value: string) {
-  const parts = value
-    .replace(/@.*/, "")
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }
-
-  return (parts[0]?.slice(0, 2) || "EZ").toUpperCase();
-}
-
 function getTelegramInitData() {
   return typeof window !== "undefined" ? (window as any).Telegram?.WebApp?.initData || "" : "";
 }
@@ -924,7 +224,6 @@ function prepareTelegramApp() {
 }
 
 function scrollToAppTop() {
-  if (typeof window === "undefined") return;
   window.requestAnimationFrame(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   });
@@ -937,10 +236,6 @@ onMounted(async () => {
     theme.value = savedTheme;
   }
   window.addEventListener("pagehide", beaconLeaveActiveRoom);
-  if (typeof route.query.chat_id === "string") {
-    telegramChatId.value = route.query.chat_id;
-    roomAccess.value = "telegram_chat";
-  }
 
   try {
     await fetchMe();
@@ -948,7 +243,6 @@ onMounted(async () => {
       await authenticateTelegram();
     }
     if (user.value) {
-      accountDisplayName.value = user.value.displayName;
       await enterStartRoom();
     }
   } finally {
@@ -971,29 +265,7 @@ useHead({
 
 <template>
   <main class="ez-main" :data-theme="theme">
-    <header class="ez-topbar">
-      <div class="ez-topbar__inner">
-        <button class="ez-brand" type="button" @click="user ? openHomeRoom() : undefined">
-          <span class="ez-brand__logo" aria-hidden="true">
-            <EzcordLogo class="ez-brand__logo-icon" />
-          </span>
-          <span class="min-w-0">
-            <span class="ez-brand__title"><span class="ez-brand__title-accent">EZ</span>CORD</span>
-            <span class="ez-brand__subtitle">Голосовые комнаты для Telegram</span>
-          </span>
-        </button>
-
-        <div class="ez-top-actions">
-          <button class="ez-icon-btn" type="button" :aria-label="themeLabel" :title="themeLabel" @click="toggleTheme">
-            {{ theme === "light" ? "☾" : "☀" }}
-          </button>
-          <button v-if="user" class="ez-user-pill" type="button" title="Выйти" @click="logout">
-            <span class="ez-user-name">{{ user.displayName }}</span>
-            <span class="ez-avatar">{{ userInitial }}</span>
-          </button>
-        </div>
-      </div>
-    </header>
+    <EzcordHeader :theme="theme" :theme-label="themeLabel" :user="user" :user-initial="userInitial" @logout="logout" @toggle-theme="toggleTheme" />
 
     <div class="ez-page-bg">
       <div v-if="isBooting" class="ez-boot">
@@ -1003,94 +275,22 @@ useHead({
           </span>
           <div>
             <p class="ez-brand__title"><span class="ez-brand__title-accent">EZ</span>CORD</p>
-            <p class="ez-kicker">загрузка</p>
+            <p class="ez-kicker">загрузка комнаты</p>
           </div>
         </div>
       </div>
 
-      <div v-else-if="!user" class="ez-shell ez-auth-shell">
-        <section class="ez-panel ez-panel--soft">
-          <div class="ez-tabs">
-            <button class="ez-tab" :class="{ 'ez-tab--active': authMode === 'register' }" type="button" @click="authMode = 'register'">
-              Регистрация
-            </button>
-            <button class="ez-tab" :class="{ 'ez-tab--active': authMode === 'login' }" type="button" @click="authMode = 'login'">
-              Вход
-            </button>
-          </div>
-
-          <form class="ez-form" @submit.prevent="submitAuth">
-            <label v-if="authMode === 'register'" class="ez-field">
-              <span class="ez-label">Имя</span>
-              <input v-model="displayName" class="ez-input" autocomplete="name" placeholder="Ваше имя" type="text" />
-            </label>
-
-            <label class="ez-field">
-              <span class="ez-label">Email</span>
-              <input v-model="email" class="ez-input" autocomplete="email" placeholder="you@mail.com" type="email" />
-            </label>
-
-            <label class="ez-field">
-              <span class="ez-label">Пароль</span>
-              <input v-model="password" class="ez-input" autocomplete="current-password" placeholder="••••••••" type="password" />
-            </label>
-
-            <button class="ez-primary" :disabled="isLoading" type="submit">
-              {{ authMode === "register" ? "Создать аккаунт" : "Войти" }}
-            </button>
-          </form>
-
-          <p class="ez-auth-note">В Telegram Mini App вход выполнится автоматически</p>
-
-          <p v-if="errorMessage" class="ez-alert ez-alert--error">{{ errorMessage }}</p>
-          <p v-if="statusMessage" class="ez-alert ez-alert--status">{{ statusMessage }}</p>
-        </section>
-
-        <section class="ez-hero">
-          <span class="ez-pill"><span class="ez-dot"></span>Telegram Mini App</span>
-          <h1 class="ez-hero-title"><span class="ez-page-title__accent">EZ</span>CORD</h1>
-          <p class="ez-hero-copy">Комнаты, приватные ссылки, доступ по Telegram-чату и email-аккаунт в одном месте.</p>
-
-          <div class="ez-feature-grid">
-            <article class="ez-feature-card">
-              <span class="ez-feature-icon">ON</span>
-              <h2>Голос</h2>
-              <p>WebRTC комнаты до {{ maxRoomParticipants }} человек.</p>
-            </article>
-            <article class="ez-feature-card">
-              <span class="ez-feature-icon">TG</span>
-              <h2>Telegram</h2>
-              <p>Вход без стартового экрана внутри Mini App.</p>
-            </article>
-            <article class="ez-feature-card">
-              <span class="ez-feature-icon">ID</span>
-              <h2>Email</h2>
-              <p>Почту можно привязать после входа.</p>
-            </article>
-          </div>
-
-          <aside class="ez-preview-card">
-            <div class="ez-room-card-row">
-              <div class="min-w-0">
-                <span class="ez-badge">LIVE</span>
-                <h2 class="ez-room-title">Вечерний подкаст</h2>
-                <p class="ez-room-subtitle">Открытая голосовая комната</p>
-              </div>
-              <span class="ez-dots">•••</span>
-            </div>
-            <div class="ez-participants">
-              <div class="ez-peer-circle ez-peer-circle--self">DK</div>
-              <div class="ez-peer-circle">AK</div>
-              <div class="ez-circle-btn">+</div>
-            </div>
-            <div class="ez-preview-room">
-              <div class="ez-wave">
-                <span v-for="height in waveBars" :key="height" :style="{ height: `${Math.max(12, Math.round(height * 0.62))}px` }"></span>
-              </div>
-            </div>
-          </aside>
-        </section>
-      </div>
+      <EzcordAuthScreen
+        v-else-if="!user"
+        v-model:auth-mode="authMode"
+        v-model:display-name="displayName"
+        v-model:email="email"
+        v-model:password="password"
+        :error-message="errorMessage"
+        :is-loading="isLoading"
+        :status-message="statusMessage"
+        @submit="submitAuth"
+      />
 
       <div v-else-if="!activeRoom" class="ez-room-shell ez-room-shell--pending">
         <section class="ez-panel ez-panel--soft ez-room-pending">
@@ -1099,90 +299,29 @@ useHead({
           <p class="ez-copy">Откроем комнату из ссылки или вашу пустую комнату.</p>
           <button class="ez-primary" :disabled="isLoading" type="button" @click="openHomeRoom">Открыть свою комнату</button>
           <p v-if="errorMessage" class="ez-alert ez-alert--error">{{ errorMessage }}</p>
-          <p v-if="statusMessage" class="ez-alert ez-alert--status">{{ statusMessage }}</p>
         </section>
       </div>
 
-      <div v-else class="ez-room-shell">
-        <p class="ez-kicker">Комната</p>
-        <h1 class="ez-room-heading">{{ activeRoom.name }}</h1>
-
-        <div class="ez-room-grid">
-          <section class="ez-room-stage">
-            <div class="ez-room-top">
-              <div class="ez-room-tags">
-                <span class="ez-badge">{{ accessGlyphs[activeRoom.access] }}</span>
-                <span class="ez-badge ez-badge--muted">{{ accessLabels[activeRoom.access] }}</span>
-                <span class="ez-live"><span class="ez-dot"></span>Активна</span>
-              </div>
-              <span class="ez-dots">•••</span>
-            </div>
-
-            <div class="ez-participants">
-              <div class="ez-peer">
-                <div class="ez-peer-circle ez-peer-circle--self">{{ userInitial }}</div>
-                <p class="ez-peer-label">вы</p>
-              </div>
-
-              <div v-for="peer in peers" :key="peer.peerId" class="ez-peer">
-                <div class="ez-peer-circle">
-                  {{ getInitials(peer.displayName) }}
-                  <button v-if="activeRoom.createdBy === user.id" class="ez-kick" type="button" @click="kickPeer(peer.peerId)">×</button>
-                </div>
-                <p class="ez-peer-label">{{ peer.displayName }}</p>
-              </div>
-
-              <button
-                v-if="activeRoom.inviteUrl"
-                class="ez-circle-btn"
-                :class="{ 'ez-circle-btn--copied': copiedRoomId === activeRoom.id }"
-                type="button"
-                :aria-label="copiedRoomId === activeRoom.id ? 'Ссылка приглашения скопирована' : 'Скопировать ссылку приглашения'"
-                :title="copiedRoomId === activeRoom.id ? 'Скопировано' : 'Скопировать приглашение'"
-                @click="copyInvite(activeRoom)"
-              >
-                {{ copiedRoomId === activeRoom.id ? "✓" : "+" }}
-              </button>
-            </div>
-
-            <div class="ez-voice-control">
-              <div>
-                <div class="ez-voice-labels">
-                  <span class="ez-kicker">Голос</span>
-                  <span class="ez-kicker">{{ isMicOn ? "Live" : "Muted" }}</span>
-                </div>
-                <div class="ez-wave" :class="{ 'ez-wave--muted': !isMicOn }">
-                  <span
-                    v-for="height in waveBars"
-                    :key="height"
-                    :style="{ height: `${Math.max(12, Math.round((height * (micLevel + 28)) / 100))}px` }"
-                  ></span>
-                </div>
-              </div>
-
-              <button class="ez-mic" :class="{ 'ez-mic--on': isMicOn }" type="button" @click="toggleMic">MIC</button>
-            </div>
-
-            <div ref="audioSink" class="hidden"></div>
-          </section>
-
-          <aside class="ez-stack">
-            <div class="ez-stat-card">
-              <p class="ez-kicker">Участники</p>
-              <p class="ez-stat-value">{{ participantCount }}/{{ maxRoomParticipants }}</p>
-            </div>
-            <div class="ez-stat-card">
-              <p class="ez-kicker">Соединения</p>
-              <p class="ez-stat-value">{{ connectedCount }}</p>
-            </div>
-            <button v-if="activeRoom.inviteUrl" class="ez-secondary" type="button" @click="copyInvite(activeRoom)">
-              {{ copiedRoomId === activeRoom.id ? "Скопировано" : "Пригласить" }}
-            </button>
-            <p v-if="errorMessage" class="ez-alert ez-alert--error">{{ errorMessage }}</p>
-            <p v-if="statusMessage" class="ez-alert ez-alert--status">{{ statusMessage }}</p>
-          </aside>
-        </div>
-      </div>
+      <EzcordRoomScreen
+        v-else
+        :connected-count="connectedPeerIds.length"
+        :copied="copiedRoomId === activeRoom.id"
+        :error-message="errorMessage"
+        :is-mic-on="isMicOn"
+        :max-room-participants="maxRoomParticipants"
+        :mic-level="micLevel"
+        :participant-count="participantCount"
+        :peers="peers"
+        :room="activeRoom"
+        :set-audio-sink="setAudioSink"
+        :status-message="statusMessage"
+        :user-id="user.id"
+        :user-initial="userInitial"
+        :wave-bars="waveBars"
+        @invite="copyInvite(activeRoom)"
+        @kick="kickPeer"
+        @toggle-mic="toggleMic"
+      />
     </div>
   </main>
 </template>

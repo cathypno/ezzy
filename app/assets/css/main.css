@@ -252,11 +252,16 @@ button {
   min-height: calc(100vh - 74px);
 }
 
-.ez-shell,
-.ez-room-shell {
+.ez-shell {
   margin: 0 auto;
   max-width: 1200px;
   padding: 24px 24px 36px;
+}
+
+.ez-room-shell {
+  margin: 0 auto;
+  max-width: 1320px;
+  padding: 28px clamp(16px, 3vw, 36px) 42px;
 }
 
 .ez-room-shell--pending {
@@ -305,6 +310,20 @@ button {
 
 .ez-auth-shell {
   grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+}
+
+.ez-auth-shell--compact {
+  display: flex;
+  min-height: calc(100vh - 74px);
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  max-width: 520px;
+  padding: 28px 24px 42px;
+}
+
+.ez-auth-shell--compact > .ez-panel {
+  width: 100%;
 }
 
 .ez-lobby-shell {
@@ -789,7 +808,7 @@ button {
 .ez-room-heading {
   margin-top: 8px;
   color: var(--ez-ink);
-  font-size: 42px;
+  font-size: 36px;
   font-weight: 900;
   line-height: 1;
 }
@@ -797,13 +816,13 @@ button {
 .ez-room-grid {
   margin-top: 20px;
   display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 220px);
 }
 
 .ez-room-stage {
-  min-height: 480px;
-  padding: 26px;
+  min-height: clamp(420px, calc(100vh - 220px), 640px);
+  padding: clamp(20px, 2.5vw, 28px);
 }
 
 .ez-room-top {
@@ -1013,14 +1032,22 @@ button {
 }
 
 @media (max-width: 1024px) {
-  .ez-auth-shell,
-  .ez-lobby-shell,
-  .ez-room-grid {
+  .ez-lobby-shell {
     grid-template-columns: 1fr;
   }
 
   .ez-feature-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ez-room-grid {
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+}
+
+@media (max-width: 900px) {
+  .ez-room-grid {
+    grid-template-columns: 1fr;
   }
 
   .ez-room-grid > .ez-stack {
@@ -1030,7 +1057,6 @@ button {
 
 @media (max-width: 760px) {
   .ez-topbar__inner,
-  .ez-shell,
   .ez-room-shell {
     padding-left: 14px;
     padding-right: 14px;
@@ -1061,32 +1087,17 @@ button {
     display: none;
   }
 
-  .ez-feature-grid,
   .ez-room-grid > .ez-stack {
     grid-template-columns: 1fr;
   }
 
-  .ez-page-title,
   .ez-room-heading {
-    font-size: 34px;
+    font-size: 32px;
   }
 
-  .ez-hero-title {
-    font-size: 52px;
-  }
-
-  .ez-hero-copy {
-    font-size: 18px;
-  }
-
-  .ez-panel,
   .ez-room-stage,
-  .ez-room-card {
+  .ez-panel {
     padding: 18px;
-  }
-
-  .ez-room-title {
-    font-size: 28px;
   }
 
   .ez-voice-control {
@@ -1096,5 +1107,10 @@ button {
   .ez-mic {
     height: 78px;
     width: 78px;
+  }
+
+  .ez-auth-shell--compact {
+    min-height: calc(100vh - 68px);
+    padding: 20px 14px 28px;
   }
 }

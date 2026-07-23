@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "nuxt build",
+    "check:component-size": "node scripts/check-component-size.mjs",
     "dev": "nuxt dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

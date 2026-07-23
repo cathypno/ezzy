@@ -99,6 +99,8 @@ interface TelegramWebAppUser {
 let pgPoolPromise: Promise<any> | null = null;
 let pgSchemaPromise: Promise<void> | null = null;
 let redisPromise: Promise<any> | null = null;
+const telegramControlMessageIds = new Map<string, number>();
+const telegramChatLocks = new Map<string, Promise<void>>();
 
 export function readEzcordData(): EzcordData {
   const path = getEzcordDataPath();
@@ -826,34 +828,132 @@ export async function getEzcordMetrics(): Promise<Record<string, any>> {
   return metrics;
 }
 
-export async function sendTelegramMessage(chatId: number | string, text: string, launchUrl?: string): Promise<void> {
-  const token = getEzcordBotToken();
+export async function sendTelegramMessage(chatId: number | string, text: string, launchUrl?: string): Promise<number | null> {
   const webAppUrl = launchUrl || getEzcordEnv("EZCORD_WEBAPP_URL") || "https://rocketseven.ru/ezcord";
 
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  return await withTelegramChatLock(String(chatId), async () => {
+    const replyMarkup = {
+      inline_keyboard: [
+        [
+          {
+            text: "Открыть Ezcord",
+            web_app: { url: webAppUrl },
+          },
+        ],
+        [
+          {
+            text: "Открыть ссылкой",
+            url: webAppUrl,
+          },
+        ],
+      ],
+    };
+    const previousMessageId = await getTelegramControlMessageId(String(chatId));
+    let messageId = previousMessageId;
+
+    if (previousMessageId) {
+      try {
+        const result = await callTelegramApi("editMessageText", {
+          chat_id: chatId,
+          message_id: previousMessageId,
+          text,
+          reply_markup: replyMarkup,
+        });
+        messageId = Number(result?.message_id || previousMessageId);
+      } catch {
+        const result = await callTelegramApi("sendMessage", {
+          chat_id: chatId,
+          text,
+          reply_markup: replyMarkup,
+        });
+        messageId = Number(result?.message_id || 0) || null;
+        await deleteTelegramMessage(chatId, previousMessageId);
+      }
+    } else {
+      const result = await callTelegramApi("sendMessage", {
+        chat_id: chatId,
+        text,
+        reply_markup: replyMarkup,
+      });
+      messageId = Number(result?.message_id || 0) || null;
+    }
+
+    if (messageId) {
+      await setTelegramControlMessageId(String(chatId), messageId);
+    }
+
+    return messageId;
+  });
+}
+
+export async function deleteTelegramMessage(chatId: number | string, messageId: number): Promise<void> {
+  try {
+    await callTelegramApi("deleteMessage", {
+      chat_id: chatId,
+      message_id: messageId,
+    });
+  } catch {
+    // The message may already be gone or the bot may lack delete permissions.
+  }
+}
+
+async function callTelegramApi(method: string, body: Record<string, any>): Promise<any> {
+  const token = getEzcordBotToken();
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "Открыть Ezcord",
-              web_app: { url: webAppUrl },
-            },
-          ],
-          [
-            {
-              text: "Открыть ссылкой",
-              url: webAppUrl,
-            },
-          ],
-        ],
-      },
-    }),
+    body: JSON.stringify(body),
   });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.description || `Telegram API ${method} failed`);
+  }
+
+  return payload.result;
+}
+
+async function withTelegramChatLock<T>(chatId: string, action: () => Promise<T>): Promise<T> {
+  const previous = telegramChatLocks.get(chatId);
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  telegramChatLocks.set(chatId, current);
+
+  await previous?.catch(() => {});
+  try {
+    return await action();
+  } finally {
+    release();
+    if (telegramChatLocks.get(chatId) === current) {
+      telegramChatLocks.delete(chatId);
+    }
+  }
+}
+
+async function getTelegramControlMessageId(chatId: string): Promise<number | null> {
+  if (useRedisStore()) {
+    const redis = await getRedis();
+    const value = await redis.get(telegramControlKey(chatId));
+    return value ? Number(value) : null;
+  }
+
+  return telegramControlMessageIds.get(chatId) || null;
+}
+
+async function setTelegramControlMessageId(chatId: string, messageId: number): Promise<void> {
+  if (useRedisStore()) {
+    const redis = await getRedis();
+    await redis.set(telegramControlKey(chatId), String(messageId));
+    return;
+  }
+
+  telegramControlMessageIds.set(chatId, messageId);
+}
+
+function telegramControlKey(chatId: string): string {
+  return `ezcord:telegram:control:${chatId}`;
 }
 
 export function randomId(prefix: string): string {
@@ -880,8 +980,12 @@ function usePostgresStore(): boolean {
   return Boolean(getEzcordEnv("EZCORD_DATABASE_URL")) && getEzcordEnv("EZCORD_STORAGE") !== "json";
 }
 
+function useRedisStore(): boolean {
+  return Boolean(getEzcordEnv("EZCORD_REDIS_URL"));
+}
+
 function useRedisLiveState(): boolean {
-  return Boolean(getEzcordEnv("EZCORD_REDIS_URL")) && getEzcordEnv("EZCORD_LIVE_STATE") !== "json";
+  return useRedisStore() && getEzcordEnv("EZCORD_LIVE_STATE") !== "json";
 }
 
 async function getPgPool(): Promise<any> {

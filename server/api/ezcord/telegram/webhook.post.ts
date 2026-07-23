@@ -11,8 +11,17 @@ export default defineEventHandler(async (event) => {
   const chatId = message?.chat?.id;
   const chatType = String(message?.chat?.type || "");
   const text = String(message?.text || "");
+  const messageId = Number(message?.message_id || 0);
 
-  if (!chatId || !/^\/(start|voice|ezcord)(@\w+)?/.test(text)) {
+  if (!chatId) {
+    return { ok: true };
+  }
+
+  if (messageId) {
+    await deleteTelegramMessage(chatId, messageId);
+  }
+
+  if (!/^\/(start|voice|ezcord)(@\w+)?(?:\s|$)/.test(text)) {
     return { ok: true };
   }
 
@@ -23,7 +32,7 @@ export default defineEventHandler(async (event) => {
 
   await sendTelegramMessage(
     chatId,
-    "Ezcord готовит голосовые комнаты для этого чата. Откройте приложение, войдите по email и привяжите Telegram.",
+    ["group", "supergroup"].includes(chatType) ? "Ezcord\nГолосовая комната для этого чата." : "Ezcord\nВаша голосовая комната.",
     launchUrl,
   );
 
