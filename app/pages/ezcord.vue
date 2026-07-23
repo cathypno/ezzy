@@ -20,7 +20,6 @@ const errorMessage = ref("");
 const isLoading = ref(false);
 const isBooting = ref(true);
 const copiedRoomId = ref("");
-const theme = ref<"light" | "dark">("light");
 const isRoomSettingsSaving = ref(false);
 const isTelegramLoginLoading = ref(false);
 const telegramLoginUrl = ref("");
@@ -60,7 +59,6 @@ const visibleMicOn = computed(() => isMicOn.value);
 const visibleMicLevel = computed(() => micLevel.value);
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
 const userPhotoUrl = computed(() => user.value?.telegram?.photoUrl || "");
-const themeLabel = computed(() => (theme.value === "light" ? "Включить темную тему" : "Включить светлую тему"));
 
 async function fetchMe() {
   const response = await $fetch<{ user: User | null }>("/api/ezcord/auth/me");
@@ -183,11 +181,6 @@ function stopTelegramLoginPolling() {
     window.clearInterval(telegramLoginTimer);
     telegramLoginTimer = 0;
   }
-}
-
-function toggleTheme() {
-  theme.value = theme.value === "light" ? "dark" : "light";
-  window.localStorage.setItem("ezcord-theme", theme.value);
 }
 
 async function enterStartRoom() {
@@ -337,10 +330,6 @@ function scrollToAppTop() {
 
 onMounted(async () => {
   prepareTelegramApp();
-  const savedTheme = window.localStorage.getItem("ezcord-theme");
-  if (savedTheme === "light" || savedTheme === "dark") {
-    theme.value = savedTheme;
-  }
   window.addEventListener("pagehide", beaconLeaveActiveRoom);
 
   try {
@@ -371,18 +360,18 @@ useHead({
 </script>
 
 <template>
-  <main class="ez-main" :data-theme="theme">
-    <EzcordHeader :theme="theme" :theme-label="themeLabel" :user="user" :user-initial="userInitial" @logout="logout" @toggle-theme="toggleTheme" />
+  <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
+    <EzcordHeader :user="user" :user-initial="userInitial" @logout="logout" />
 
-    <div class="ez-page-bg">
-      <div v-if="isBooting" class="ez-boot">
-        <div class="ez-boot-card">
-          <span class="ez-brand__logo" aria-hidden="true">
-            <EzcordLogo class="ez-brand__logo-icon" />
+    <div class="min-h-[calc(100vh-74px)]">
+      <div v-if="isBooting" class="flex min-h-[calc(100vh-74px)] items-center justify-center p-6">
+        <div class="flex items-center gap-4 rounded-[18px] border border-ez-line bg-ez-card p-[18px] shadow-ez">
+          <span class="grid h-12 w-12 shrink-0 place-items-center text-ez-green" aria-hidden="true">
+            <EzcordLogo class="h-12 w-12 scale-x-[-1]" />
           </span>
           <div>
-            <p class="ez-brand__title"><span class="ez-brand__title-accent">EZ</span>CORD</p>
-            <p class="ez-kicker">загрузка комнаты</p>
+            <p class="block text-[22px] font-black leading-none text-ez-ink"><span class="text-ez-green">EZ</span>CORD</p>
+            <p class="mt-1 text-xs font-black uppercase leading-[1.2] text-ez-muted">загрузка комнаты</p>
           </div>
         </div>
       </div>
@@ -402,13 +391,20 @@ useHead({
         @telegram-login="startTelegramLogin"
       />
 
-      <div v-else-if="!activeRoom" class="ez-room-shell ez-room-shell--pending">
-        <section class="ez-panel ez-panel--soft ez-room-pending">
-          <p class="ez-kicker">Комната</p>
-          <h1 class="ez-heading">Готовим комнату</h1>
-          <p class="ez-copy">Откроем комнату из ссылки или вашу пустую комнату.</p>
-          <button class="ez-primary" :disabled="isLoading" type="button" @click="openHomeRoom">Открыть свою комнату</button>
-          <p v-if="errorMessage" class="ez-alert ez-alert--error">{{ errorMessage }}</p>
+      <div v-else-if="!activeRoom" class="flex min-h-[calc(100vh-74px)] items-center justify-center px-6 py-7 max-[760px]:px-3.5">
+        <section class="grid w-full max-w-[420px] gap-3.5 rounded-[18px] border border-ez-line bg-gradient-to-b from-ez-card to-ez-card-2 p-[22px] shadow-ez">
+          <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Комната</p>
+          <h1 class="-mt-1 text-[25px] font-black leading-[1.08] text-ez-ink">Готовим комнату</h1>
+          <p class="text-sm font-bold leading-[1.55] text-ez-muted">Откроем комнату из ссылки или вашу пустую комнату.</p>
+          <button
+            class="inline-flex min-h-[50px] items-center justify-center rounded-[14px] bg-gradient-to-br from-[#8ef25a] to-ez-green-dark px-[18px] text-[15px] font-black text-[#082900] shadow-[0_14px_30px_-12px_rgba(82,207,28,0.72)] transition hover:-translate-y-px disabled:cursor-default disabled:opacity-[.58] disabled:hover:translate-y-0"
+            :disabled="isLoading"
+            type="button"
+            @click="openHomeRoom"
+          >
+            Открыть свою комнату
+          </button>
+          <p v-if="errorMessage" class="rounded-[18px] border border-[#e5484d]/35 bg-[#e5484d]/10 px-4 py-3.5 text-[13px] font-extrabold text-[#ff9aa2]">{{ errorMessage }}</p>
         </section>
       </div>
 

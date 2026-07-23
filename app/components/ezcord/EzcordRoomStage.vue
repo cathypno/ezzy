@@ -35,50 +35,53 @@ const accessGlyphs: Record<Room["access"], string> = {
 };
 
 function hideBrokenAvatar(event: Event) {
-  (event.currentTarget as HTMLImageElement).classList.add("ez-peer-avatar--broken");
+  const image = event.currentTarget as HTMLImageElement;
+  image.classList.add("hidden");
+  (image.nextElementSibling as HTMLElement | null)?.classList.remove("hidden");
 }
 </script>
 
 <template>
-  <section class="ez-room-stage">
-    <div class="ez-room-top">
-      <div class="ez-room-tags">
-        <span class="ez-badge">{{ accessGlyphs[props.room.access] }}</span>
-        <span class="ez-badge ez-badge--muted">{{
-          accessLabels[props.room.access]
-        }}</span>
-        <span class="ez-live"><span class="ez-dot"></span>Активна</span>
+  <section class="relative min-h-[clamp(420px,calc(100vh-220px),640px)] overflow-hidden rounded-[18px] bg-gradient-to-b from-ez-widget to-[#0d0f0d] p-[clamp(20px,2.5vw,28px)] text-white shadow-ez-stage max-[760px]:p-[18px]">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-2.5">
+        <span class="inline-flex min-h-7 items-center justify-center rounded-[9px] bg-ez-green-soft px-2.5 text-xs font-black text-ez-green-dark">{{ accessGlyphs[props.room.access] }}</span>
+        <span class="inline-flex min-h-7 items-center justify-center rounded-[9px] bg-white/[.08] px-2.5 text-xs font-black text-ez-widget-muted">{{ accessLabels[props.room.access] }}</span>
+        <span class="inline-flex min-h-[30px] items-center gap-2 rounded-full bg-ez-green-soft px-3 text-xs font-black text-ez-green-dark"><span class="h-[7px] w-[7px] shrink-0 rounded-full bg-ez-green shadow-[0_0_14px_rgba(99,226,30,0.58)]"></span>Активна</span>
       </div>
     </div>
 
-    <div class="ez-participants">
-      <div class="ez-peer">
-        <div class="ez-peer-circle ez-peer-circle--self" :class="{ 'ez-peer-circle--waiting': props.isWaiting }">
+    <div class="mt-[26px] flex flex-wrap gap-3.5">
+      <div class="w-[74px] text-center">
+        <div
+          class="relative mx-auto grid h-[62px] w-[62px] place-items-center rounded-full border-[3px] text-[19px] font-black"
+          :class="props.isWaiting ? 'border-dashed border-ez-widget-muted bg-ez-widget-field text-ez-widget-muted' : 'border-ez-green bg-ez-green text-[#082900] shadow-[0_0_26px_rgba(99,226,30,0.42)]'"
+        >
           <img
             v-if="props.userPhotoUrl"
-            class="ez-peer-avatar"
+            class="h-full w-full rounded-[inherit] object-cover"
             :src="props.userPhotoUrl"
             alt=""
             @error="hideBrokenAvatar"
           />
-          <span class="ez-peer-avatar-fallback">{{ props.userInitial }}</span>
+          <span class="text-inherit" :class="{ hidden: props.userPhotoUrl }">{{ props.userInitial }}</span>
         </div>
-        <p class="ez-peer-label">{{ props.isWaiting ? "в ожидании" : "вы" }}</p>
+        <p class="mt-2 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-extrabold text-ez-widget-muted">{{ props.isWaiting ? "в ожидании" : "вы" }}</p>
       </div>
 
-      <div v-for="peer in props.peers" :key="peer.peerId" class="ez-peer">
-        <div class="ez-peer-circle">
+      <div v-for="peer in props.peers" :key="peer.peerId" class="w-[74px] text-center">
+        <div class="relative mx-auto grid h-[62px] w-[62px] place-items-center rounded-full border-[3px] border-ez-green bg-white/[.08] text-[19px] font-black text-white">
           <img
             v-if="peer.photoUrl"
-            class="ez-peer-avatar"
+            class="h-full w-full rounded-[inherit] object-cover"
             :src="peer.photoUrl"
             :alt="peer.displayName"
             @error="hideBrokenAvatar"
           />
-          <span class="ez-peer-avatar-fallback">{{ getInitials(peer.displayName) }}</span>
+          <span class="text-inherit" :class="{ hidden: peer.photoUrl }">{{ getInitials(peer.displayName) }}</span>
           <button
             v-if="props.room.createdBy === props.userId"
-            class="ez-kick"
+            class="absolute -right-[7px] -top-[7px] grid h-6 w-6 place-items-center rounded-full border-2 border-ez-widget bg-[#e5484d] text-xs font-black text-white"
             type="button"
             aria-label="Кикнуть участника"
             title="Кикнуть участника"
@@ -87,13 +90,13 @@ function hideBrokenAvatar(event: Event) {
             ×
           </button>
         </div>
-        <p class="ez-peer-label">{{ peer.displayName }}</p>
+        <p class="mt-2 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-extrabold text-ez-widget-muted">{{ peer.displayName }}</p>
       </div>
 
       <button
         v-if="props.room.inviteUrl"
-        class="ez-circle-btn"
-        :class="{ 'ez-circle-btn--copied': props.copied }"
+        class="grid h-[62px] w-[62px] place-items-center rounded-full text-[19px] font-black"
+        :class="props.copied ? 'border-2 border-solid border-ez-green bg-ez-green text-[#082900] shadow-[0_0_24px_rgba(99,226,30,0.38)]' : 'border-2 border-dashed border-ez-widget-muted/55 bg-transparent text-ez-widget-muted'"
         type="button"
         :aria-label="
           props.copied
@@ -107,24 +110,26 @@ function hideBrokenAvatar(event: Event) {
       </button>
     </div>
 
-    <div class="ez-voice-control">
+    <div class="mt-7 grid items-end gap-4 [grid-template-columns:minmax(0,1fr)_94px] max-[760px]:grid-cols-1">
       <div>
-        <div class="ez-voice-labels">
-          <span class="ez-kicker">Голос</span>
-          <span class="ez-kicker">{{ props.isMicOn ? "Live" : "Muted" }}</span>
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">Голос</span>
+          <span class="text-xs font-black uppercase leading-[1.2] text-ez-widget-muted">{{ props.isMicOn ? "Live" : "Muted" }}</span>
         </div>
-        <div class="ez-wave" :class="{ 'ez-wave--muted': !props.isMicOn }">
+        <div class="mt-2.5 flex h-[70px] items-end justify-center gap-2 rounded-[14px] bg-ez-widget-field p-4">
           <span
-            v-for="height in props.waveBars"
+            v-for="(height, index) in props.waveBars"
             :key="height"
+            class="w-[5px] origin-bottom animate-[ez-eq_1.1s_ease-in-out_infinite_alternate] rounded-full bg-gradient-to-b from-[#8ef25a] to-ez-green"
+            :class="!props.isMicOn ? 'bg-ez-widget-muted/45 [animation-play-state:paused]' : index % 3 === 0 ? 'animate-[ez-eq_1.32s_ease-in-out_infinite_alternate]' : index % 2 === 0 ? 'animate-[ez-eq_1.1s_ease-in-out_infinite_alternate]' : 'animate-[ez-eq_.86s_ease-in-out_infinite_alternate]'"
             :style="{
               height: `${Math.max(12, Math.round((height * (props.micLevel + 28)) / 100))}px`,
             }"
-          ></span>
+          />
         </div>
         <button
-          class="ez-mic"
-          :class="{ 'ez-mic--on': props.isMicOn, 'ez-mic--disabled': props.isWaiting }"
+          class="mt-4 grid h-[86px] w-[86px] place-items-center rounded-full text-[19px] font-black transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-[.55] disabled:hover:translate-y-0 max-[760px]:h-[78px] max-[760px]:w-[78px]"
+          :class="props.isMicOn ? 'border border-transparent bg-ez-green text-[#082900] shadow-[0_0_38px_rgba(99,226,30,0.66)]' : 'border border-ez-widget-muted/58 bg-ez-widget-field text-ez-widget-muted'"
           :disabled="props.isWaiting"
           type="button"
           :title="props.isWaiting ? 'Место освободится — вы в очереди' : 'Переключить микрофон'"

@@ -58,19 +58,19 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
 </script>
 
 <template>
-  <div class="ez-room-shell">
-    <div class="ez-room-heading-row">
+  <div class="mx-auto max-w-[1320px] px-[clamp(16px,3vw,36px)] pb-[42px] pt-7 max-[760px]:px-3.5">
+    <div class="flex items-start justify-between gap-[18px]">
       <div>
-        <p class="ez-kicker">Комната</p>
-        <h1 class="ez-room-heading">{{ props.room.name }}</h1>
-        <div class="ez-room-meta" aria-label="Параметры комнаты">
-          <span>Игра: {{ gameLabels[props.room.game] }}</span>
-          <span>Цель: {{ goalLabels[props.room.goal] }}</span>
+        <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Комната</p>
+        <h1 class="mt-2 text-[36px] font-black leading-none text-ez-ink max-[760px]:text-[32px]">{{ props.room.name }}</h1>
+        <div class="mt-2.5 flex flex-wrap gap-2" aria-label="Параметры комнаты">
+          <span class="inline-flex min-h-7 items-center rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">Игра: {{ gameLabels[props.room.game] }}</span>
+          <span class="inline-flex min-h-7 items-center rounded-full border border-ez-line bg-ez-card px-2.5 text-xs font-extrabold text-ez-muted">Цель: {{ goalLabels[props.room.goal] }}</span>
         </div>
       </div>
       <button
         v-if="props.room.createdBy === props.userId"
-        class="ez-room-edit-btn"
+        class="mt-5 grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-ez-line bg-ez-card text-[22px] leading-none text-ez-muted shadow-ez transition hover:-translate-y-px hover:border-ez-green/55 hover:text-ez-green-dark max-[760px]:mt-4"
         type="button"
         aria-label="Изменить комнату"
         title="Изменить комнату"
@@ -80,7 +80,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
       </button>
     </div>
 
-    <div class="ez-room-grid">
+    <div class="mt-5 grid gap-4 [grid-template-columns:minmax(0,1fr)_minmax(190px,220px)] max-[900px]:grid-cols-1">
       <EzcordRoomStage
         :copied="props.copied"
         :is-mic-on="props.isMicOn"
