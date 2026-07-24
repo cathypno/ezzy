@@ -1,17 +1,9 @@
 import { createError } from "h3";
-import {
-  canAccessRoom,
-  appendEzcordSignal,
-  checkEzcordRateLimitKey,
-  EZCORD_MAX_ROOM_PARTICIPANTS,
-  EZCORD_SESSION_COOKIE,
-  getEzcordRoom,
-  getEzcordUserBySessionId,
-  leaveEzcordPeer,
-  touchEzcordPeer,
-  type EzcordSignal,
-  type EzcordUser,
-} from "../../utils/ezcord";
+import { EZCORD_SESSION_COOKIE, getEzcordUserBySessionId } from "../../utils/ezcord/auth";
+import { canAccessRoom, getEzcordRoom } from "../../utils/ezcord/rooms";
+import { appendEzcordSignal, EZCORD_MAX_ROOM_PARTICIPANTS, leaveEzcordPeer, touchEzcordPeer } from "../../utils/ezcord/presence";
+import { checkEzcordRateLimitKey } from "../../utils/ezcord/rate-limit";
+import type { EzcordSignal, EzcordUser } from "../../utils/ezcord/types";
 import {
   attachEzcordRealtimePeer,
   attachEzcordRealtimeWaitingPeer,
