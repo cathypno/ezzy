@@ -1,8 +1,6 @@
-import {
-  checkEzcordRateLimit,
-  createTelegramLoginRequest,
-  getTelegramBotUsername,
-} from "../../../../utils/ezcord";
+import { checkEzcordRateLimit } from "../../../../utils/ezcord/rate-limit";
+import { getTelegramBotUsername } from "../../../../utils/ezcord/telegram-bot";
+import { createTelegramLoginRequest } from "../../../../utils/ezcord/telegram-login";
 
 export default defineEventHandler(async (event) => {
   await checkEzcordRateLimit(event, "telegram_login_request", 10);

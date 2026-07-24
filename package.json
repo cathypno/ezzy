@@ -9,8 +9,11 @@
     "dev": "nuxt dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "postinstall": "nuxt prepare",
-    "preview": "nuxt preview"
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
@@ -22,6 +25,12 @@
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
-    "prettier": "^3.8.2"
+    "@nuxt/eslint": "^1.16.0",
+    "@types/node": "^26.1.1",
+    "@types/pg": "^8.20.0",
+    "eslint": "^10.8.0",
+    "prettier": "^3.8.2",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^2.2.12"
   }
 }

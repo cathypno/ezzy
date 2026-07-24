@@ -39,6 +39,10 @@ Required services:
 
 The Postgres schema is created automatically on first startup. Existing `data/ezcord.json` state is migrated once when Postgres is enabled.
 
+On boot, the server validates its own configuration and refuses to start in production if `EZCORD_DATABASE_URL` or `EZCORD_REDIS_URL` is missing (set `EZCORD_STORAGE=json` / `EZCORD_LIVE_STATE=json` to explicitly opt into the local JSON fallback instead). It also warns on startup if `EZCORD_BOT_TOKEN` is set without `EZCORD_WEBHOOK_SECRET`, since the Telegram webhook then accepts unauthenticated requests.
+
+Set `EZCORD_ADMIN_EMAILS` to a comma-separated list of account emails allowed to read `/api/ezcord/metrics`. Without it, no one can read metrics (not even logged-in users).
+
 ## CI/CD
 
 GitHub Actions deploys Ezcord files into the current production Nuxt app at `/var/www/rs-platform` and restarts PM2 process `rocketseven-site`.
@@ -57,7 +61,7 @@ Health check:
 curl https://your-domain.example/api/ezcord/health
 ```
 
-Authenticated metrics:
+Metrics (admin only — see `EZCORD_ADMIN_EMAILS`):
 
 ```text
 /api/ezcord/metrics

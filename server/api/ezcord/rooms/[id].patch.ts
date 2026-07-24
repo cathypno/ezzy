@@ -1,4 +1,5 @@
-import { checkEzcordRateLimit, requireRoomAccess, roomInviteUrl, updateEzcordRoomSettings } from "../../../utils/ezcord";
+import { checkEzcordRateLimit } from "../../../utils/ezcord/rate-limit";
+import { requireRoomAccess, roomInviteUrl, updateEzcordRoomSettings } from "../../../utils/ezcord/rooms";
 import { broadcastEzcordRealtimeRoomSettings } from "../../../utils/ezcordRealtime";
 
 export default defineEventHandler(async (event) => {

@@ -1,14 +1,12 @@
+import { getEzcordEnv } from "../../../utils/ezcord/env";
+import { ezcordRoomWebAppUrl, getEzcordRoom } from "../../../utils/ezcord/rooms";
+import { approveTelegramLoginRequest, bindTelegramLoginRequest } from "../../../utils/ezcord/telegram-login";
 import {
   answerTelegramCallbackQuery,
-  approveTelegramLoginRequest,
-  bindTelegramLoginRequest,
   deleteTelegramMessage,
-  ezcordRoomWebAppUrl,
-  getEzcordEnv,
-  getEzcordRoom,
   sendTelegramControlMessage,
   sendTelegramMessage,
-} from "../../../utils/ezcord";
+} from "../../../utils/ezcord/telegram-bot";
 import { decodeEzcordRoomBotStart } from "#shared/ezcord-launch";
 
 export default defineEventHandler(async (event) => {
@@ -83,7 +81,7 @@ export default defineEventHandler(async (event) => {
 
   const startPayload = text.match(/^\/(?:start|voice|ezcord)(?:@\w+)?(?:\s+(.+))?$/)?.[1]?.trim() || "";
   if (startPayload.startsWith("ezlogin_")) {
-    let requestId = "";
+    let requestId: string;
     try {
       requestId = decodeURIComponent(startPayload.slice("ezlogin_".length));
     } catch {

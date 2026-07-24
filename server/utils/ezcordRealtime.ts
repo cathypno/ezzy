@@ -1,4 +1,4 @@
-import { EZCORD_MAX_ROOM_PARTICIPANTS, getEzcordWaitingCount, listEzcordPeers } from "./ezcord";
+import { EZCORD_MAX_ROOM_PARTICIPANTS, getEzcordWaitingCount, listEzcordPeers } from "./ezcord/presence";
 
 interface EzcordRealtimePeer {
   peer: any;
