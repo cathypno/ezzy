@@ -16,7 +16,9 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
+    "@nuxt/eslint": "^1.16.0",
     "@tailwindcss/vite": "^4.1.17",
+    "eslint": "^10.8.0",
     "ioredis": "^5.11.1",
     "nuxt": "^4.2.1",
     "pg": "^8.22.0",
@@ -25,10 +27,8 @@
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
-    "@nuxt/eslint": "^1.16.0",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
-    "eslint": "^10.8.0",
     "prettier": "^3.8.2",
     "typescript": "^5.9.3",
     "vue-tsc": "^2.2.12"
