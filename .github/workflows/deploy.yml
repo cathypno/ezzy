@@ -28,12 +28,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
   deploy:
     name: Deploy
@@ -65,6 +68,8 @@ jobs:
           DEPLOY_USER: ${{ secrets.EZCORD_DEPLOY_USER }}
         run: |
           tar -cf /tmp/ezcord-deploy.tar \
+            package.json \
+            pnpm-lock.yaml \
             app/components/EzcordLogo.vue \
             app/components/ezcord \
             app/assets/css/main.css \
@@ -94,7 +99,7 @@ jobs:
             rm -f public/ezcord-logo.png public/ezcord-mark.svg
             rm -f server/utils/ezcord.ts
             find app server public -name '._*' -type f -delete
-            bash -lc 'source /root/.nvm/nvm.sh && npm install && npm run build && pm2 restart $REMOTE_PM2_APP --update-env'
+            bash -lc 'source /root/.nvm/nvm.sh && corepack enable && pnpm install --frozen-lockfile && pnpm run build && pm2 restart $REMOTE_PM2_APP --update-env'
           "
 
       - name: Health check
