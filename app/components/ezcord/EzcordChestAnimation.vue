@@ -1,5 +1,21 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import frame00 from "~/assets/ezcord/chest/f00.png";
+import frame01 from "~/assets/ezcord/chest/f01.png";
+import frame02 from "~/assets/ezcord/chest/f02.png";
+import frame03 from "~/assets/ezcord/chest/f03.png";
+import frame04 from "~/assets/ezcord/chest/f04.png";
+import frame05 from "~/assets/ezcord/chest/f05.png";
+import frame06 from "~/assets/ezcord/chest/f06.png";
+import frame07 from "~/assets/ezcord/chest/f07.png";
+import frame08 from "~/assets/ezcord/chest/f08.png";
+import frame09 from "~/assets/ezcord/chest/f09.png";
+import frame10 from "~/assets/ezcord/chest/f10.png";
+import frame11 from "~/assets/ezcord/chest/f11.png";
+import frame12 from "~/assets/ezcord/chest/f12.png";
+import frame13 from "~/assets/ezcord/chest/f13.png";
+import frame14 from "~/assets/ezcord/chest/f14.png";
+import frame15 from "~/assets/ezcord/chest/f15.png";
 
 const props = defineProps<{
   lobbyUnlocked: boolean;
@@ -14,20 +30,30 @@ const emit = defineEmits<{
 const FRAME_COUNT = 16;
 const FRAME_MS = 46;
 const PEAK_FRAME = 11;
-const frameModules = import.meta.glob("../../assets/ezcord/chest/*.png", {
-  eager: true,
-  import: "default",
-  query: "?url",
-}) as Record<string, string>;
-const frameSources = Array.from({ length: FRAME_COUNT }, (_, index) => {
-  const name = `f${String(index).padStart(2, "0")}.png`;
-  return Object.entries(frameModules).find(([path]) => path.endsWith(`/${name}`))?.[1] || `/ezcord/chest/${name}`;
-});
+const frameSources = [
+  frame00,
+  frame01,
+  frame02,
+  frame03,
+  frame04,
+  frame05,
+  frame06,
+  frame07,
+  frame08,
+  frame09,
+  frame10,
+  frame11,
+  frame12,
+  frame13,
+  frame14,
+  frame15,
+];
 
 const frame = ref(0);
 const isOpen = ref(false);
 const burst = ref(false);
 const flash = ref(false);
+const hasFrameError = ref(false);
 let frameTimer = 0;
 let flashTimer = 0;
 
@@ -67,6 +93,7 @@ watch(
 function playOpen() {
   clearTimers();
   frame.value = 0;
+  hasFrameError.value = false;
   isOpen.value = false;
   burst.value = false;
   flash.value = false;
@@ -116,12 +143,21 @@ onBeforeUnmount(clearTimers);
     <div class="absolute bottom-[12%] left-1/2 h-10 w-[68%] -translate-x-1/2 rounded-full bg-black/70 blur-[12px]"></div>
 
     <img
+      v-if="!hasFrameError"
       class="relative z-10 h-full w-full object-contain drop-shadow-[0_28px_38px_rgba(0,0,0,.58)]"
       :class="isOpen ? 'drop-shadow-[0_0_22px_rgba(99,226,30,.2)]' : ''"
       :src="frameSrc"
       alt=""
       draggable="false"
+      @error="hasFrameError = true"
     />
+    <div v-else class="relative z-10 grid h-full w-full place-items-center">
+      <div class="relative h-[46%] w-[58%] rounded-b-[22px] border border-[#6b5a38] bg-[linear-gradient(135deg,#5b341c,#9a5b28_52%,#4a2918)] shadow-[0_26px_38px_rgba(0,0,0,.5)]">
+        <div class="absolute -top-[38%] left-1/2 h-[48%] w-[88%] -translate-x-1/2 rounded-t-[999px] border border-[#75633f] bg-[linear-gradient(135deg,#6b3d1e,#bd7631_52%,#4d2b18)]"></div>
+        <div class="absolute left-0 top-[32%] h-[18%] w-full bg-[#232625]/80"></div>
+        <div class="absolute left-1/2 top-[26%] grid h-[32%] w-[22%] -translate-x-1/2 place-items-center rounded-[12px] border border-[#ffd447]/45 bg-[#b47a24] text-[18px] text-ez-green shadow-[0_0_24px_rgba(99,226,30,.28)]">◆</div>
+      </div>
+    </div>
 
     <div
       v-if="isOpen && rewardCoins !== null"
