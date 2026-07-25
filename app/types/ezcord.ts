@@ -45,6 +45,8 @@ export interface Room {
   access: Access;
   game: RoomGame;
   goal: RoomGoal;
+  participantCount?: number;
+  maxParticipants?: number;
   inviteUrl?: string;
   telegramChatId?: string;
   createdBy: string;
