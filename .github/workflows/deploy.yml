@@ -76,7 +76,7 @@ jobs:
             pnpm-lock.yaml \
             app/components/EzcordLogo.vue \
             app/components/ezcord \
-            app/assets/css/main.css \
+            app/assets \
             app/pages/ezcord.vue \
             app/pages/index.vue \
             app/composables \
