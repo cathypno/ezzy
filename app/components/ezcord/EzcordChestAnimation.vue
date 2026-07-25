@@ -1,21 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import frame00 from "~/assets/ezcord/chest/f00.png";
-import frame01 from "~/assets/ezcord/chest/f01.png";
-import frame02 from "~/assets/ezcord/chest/f02.png";
-import frame03 from "~/assets/ezcord/chest/f03.png";
-import frame04 from "~/assets/ezcord/chest/f04.png";
-import frame05 from "~/assets/ezcord/chest/f05.png";
-import frame06 from "~/assets/ezcord/chest/f06.png";
-import frame07 from "~/assets/ezcord/chest/f07.png";
-import frame08 from "~/assets/ezcord/chest/f08.png";
-import frame09 from "~/assets/ezcord/chest/f09.png";
-import frame10 from "~/assets/ezcord/chest/f10.png";
-import frame11 from "~/assets/ezcord/chest/f11.png";
-import frame12 from "~/assets/ezcord/chest/f12.png";
-import frame13 from "~/assets/ezcord/chest/f13.png";
-import frame14 from "~/assets/ezcord/chest/f14.png";
-import frame15 from "~/assets/ezcord/chest/f15.png";
+import { onBeforeUnmount, ref, watch } from "vue";
+import chestClosed from "~/assets/ezcord/chest/chest-closed.webp";
+import chestOpen from "~/assets/ezcord/chest/chest-open.webp";
 
 const props = defineProps<{
   lobbyUnlocked: boolean;
@@ -27,37 +13,18 @@ const emit = defineEmits<{
   done: [];
 }>();
 
-const FRAME_COUNT = 16;
-const FRAME_MS = 46;
-const PEAK_FRAME = 11;
-const frameSources = [
-  frame00,
-  frame01,
-  frame02,
-  frame03,
-  frame04,
-  frame05,
-  frame06,
-  frame07,
-  frame08,
-  frame09,
-  frame10,
-  frame11,
-  frame12,
-  frame13,
-  frame14,
-  frame15,
-];
+const OPEN_REVEAL_MS = 260;
+const DONE_MS = 740;
 
-const frame = ref(0);
 const isOpen = ref(false);
+const isOpening = ref(false);
 const burst = ref(false);
 const flash = ref(false);
 const hasFrameError = ref(false);
-let frameTimer = 0;
+let openTimer = 0;
+let doneTimer = 0;
 let flashTimer = 0;
 
-const frameSrc = computed(() => frameSources[frame.value] || frameSources[0]);
 const particles = Array.from({ length: 18 }, (_, index) => {
   const angle = (-164 + (index / 17) * 148) * (Math.PI / 180);
   const distance = 108 + ((index * 23) % 118);
@@ -92,40 +59,35 @@ watch(
 
 function playOpen() {
   clearTimers();
-  frame.value = 0;
   hasFrameError.value = false;
   isOpen.value = false;
+  isOpening.value = true;
   burst.value = false;
   flash.value = false;
 
-  frameTimer = window.setInterval(() => {
-    const nextFrame = frame.value + 1;
+  openTimer = window.setTimeout(() => {
+    isOpen.value = true;
+    burst.value = true;
+    flash.value = true;
+    flashTimer = window.setTimeout(() => {
+      flash.value = false;
+    }, 260);
+  }, OPEN_REVEAL_MS);
 
-    if (nextFrame === PEAK_FRAME) {
-      burst.value = true;
-      flash.value = true;
-      flashTimer = window.setTimeout(() => {
-        flash.value = false;
-      }, 260);
-    }
-
-    if (nextFrame >= FRAME_COUNT - 1) {
-      frame.value = FRAME_COUNT - 1;
-      isOpen.value = true;
-      window.clearInterval(frameTimer);
-      frameTimer = 0;
-      emit("done");
-      return;
-    }
-
-    frame.value = nextFrame;
-  }, FRAME_MS);
+  doneTimer = window.setTimeout(() => {
+    isOpening.value = false;
+    emit("done");
+  }, DONE_MS);
 }
 
 function clearTimers() {
-  if (frameTimer) {
-    window.clearInterval(frameTimer);
-    frameTimer = 0;
+  if (openTimer) {
+    window.clearTimeout(openTimer);
+    openTimer = 0;
+  }
+  if (doneTimer) {
+    window.clearTimeout(doneTimer);
+    doneTimer = 0;
   }
   if (flashTimer) {
     window.clearTimeout(flashTimer);
@@ -144,9 +106,21 @@ onBeforeUnmount(clearTimers);
 
     <img
       v-if="!hasFrameError"
-      class="relative z-10 h-full w-full object-contain drop-shadow-[0_28px_38px_rgba(0,0,0,.58)]"
-      :class="isOpen ? 'drop-shadow-[0_0_22px_rgba(99,226,30,.2)]' : ''"
-      :src="frameSrc"
+      class="relative z-10 h-full w-full object-contain transition-[opacity,transform,filter] duration-300 ease-out drop-shadow-[0_28px_38px_rgba(0,0,0,.58)]"
+      :class="[
+        isOpen ? 'scale-[.96] -translate-y-1 opacity-0' : 'scale-100 opacity-100',
+        isOpening && !isOpen ? 'animate-[ez-chest-rumble_.28s_ease-in-out_both]' : '',
+      ]"
+      :src="chestClosed"
+      alt=""
+      draggable="false"
+      @error="hasFrameError = true"
+    />
+    <img
+      v-if="!hasFrameError"
+      class="absolute inset-0 z-10 h-full w-full object-contain transition-[opacity,transform,filter] duration-300 ease-out drop-shadow-[0_0_26px_rgba(99,226,30,.22)]"
+      :class="isOpen ? 'scale-[1.04] -translate-y-2 opacity-100' : 'scale-[.94] translate-y-2 opacity-0'"
+      :src="chestOpen"
       alt=""
       draggable="false"
       @error="hasFrameError = true"

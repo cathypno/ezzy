@@ -143,6 +143,25 @@
   }
 }
 
+@keyframes ez-chest-rumble {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg) scale(1);
+  }
+
+  22% {
+    transform: translateX(-4px) rotate(-1.1deg) scale(1.015);
+  }
+
+  48% {
+    transform: translateX(4px) rotate(1.1deg) scale(1.02);
+  }
+
+  72% {
+    transform: translateX(-2px) rotate(-0.55deg) scale(1.01);
+  }
+}
+
 @keyframes ez-chest-particle {
   0% {
     opacity: 0;
