@@ -14,6 +14,15 @@ const emit = defineEmits<{
 const FRAME_COUNT = 16;
 const FRAME_MS = 46;
 const PEAK_FRAME = 11;
+const frameModules = import.meta.glob("../../assets/ezcord/chest/*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+const frameSources = Array.from({ length: FRAME_COUNT }, (_, index) => {
+  const name = `f${String(index).padStart(2, "0")}.png`;
+  return Object.entries(frameModules).find(([path]) => path.endsWith(`/${name}`))?.[1] || `/ezcord/chest/${name}`;
+});
 
 const frame = ref(0);
 const isOpen = ref(false);
@@ -22,7 +31,7 @@ const flash = ref(false);
 let frameTimer = 0;
 let flashTimer = 0;
 
-const frameSrc = computed(() => `/ezcord/chest/f${String(frame.value).padStart(2, "0")}.png`);
+const frameSrc = computed(() => frameSources[frame.value] || frameSources[0]);
 const particles = Array.from({ length: 18 }, (_, index) => {
   const angle = (-164 + (index / 17) * 148) * (Math.PI / 180);
   const distance = 108 + ((index * 23) % 118);
