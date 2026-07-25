@@ -14,8 +14,8 @@ const emit = defineEmits<{
   join: [room: Room];
 }>();
 
-const gameFilter = ref<RoomGame | "all">("all");
-const goalFilter = ref<RoomGoal | "all">("all");
+const gameFilter = ref<RoomGame>("voicechat");
+const goalFilter = ref<RoomGoal>("communication");
 const searchOpen = ref(false);
 const searchQuery = ref("");
 const searchInputRef = ref<HTMLInputElement | null>(null);
@@ -32,22 +32,21 @@ const goalLabels: Record<RoomGoal, string> = {
   communication: "Общение",
 };
 
-const selectedGameIcon = computed(() => (gameFilter.value === "all" ? null : gameFilter.value));
-const selectedGoalIcon = computed(() => (goalFilter.value === "all" ? null : goalFilter.value));
+const selectedGameIcon = computed(() => gameFilter.value);
+const selectedGoalIcon = computed(() => goalFilter.value);
 
 const activeRooms = computed(() => props.rooms.filter((room) => getParticipantCount(room) > 0));
 const filteredRooms = computed(() =>
   activeRooms.value.filter((room) => {
-    if (gameFilter.value !== "all" && room.game !== gameFilter.value) return false;
-    if (goalFilter.value !== "all" && room.goal !== goalFilter.value) return false;
+    if (room.game !== gameFilter.value) return false;
+    if (room.goal !== goalFilter.value) return false;
     if (searchQuery.value.trim() && !room.name.toLowerCase().includes(searchQuery.value.trim().toLowerCase())) return false;
     return true;
   }),
 );
 
-const hasActiveFilters = computed(() => gameFilter.value !== "all" || goalFilter.value !== "all" || Boolean(searchQuery.value.trim()));
 const emptyStateTitle = computed(() => (activeRooms.value.length ? "Комнат не найдено" : "Комнат нет"));
-const emptyStateSubtitle = computed(() => (hasActiveFilters.value ? "Попробуй изменить фильтр или поиск." : "Живые комнаты появятся здесь, когда в них зайдут участники."));
+const emptyStateSubtitle = computed(() => (activeRooms.value.length ? "Попробуй изменить игру, цель или поиск." : "Живые комнаты появятся здесь, когда в них зайдут участники."));
 
 function getParticipantCount(room: Room) {
   return Math.max(0, room.participantCount || 0);
@@ -98,7 +97,6 @@ function joinRandomRoom() {
               <span class="relative block">
                 <EzcordMetaIcon v-if="selectedGameIcon" :name="selectedGameIcon" class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[18px] text-ez-green" />
                 <select v-model="gameFilter" class="h-11 w-full appearance-none rounded-[13px] border border-ez-field-line bg-ez-field py-0 pl-10 pr-8 text-sm font-extrabold text-ez-ink outline-none focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
-                  <option value="all">Любая игра</option>
                   <option value="voicechat">Войсчат</option>
                   <option value="cs2">CS2</option>
                   <option value="dota2">Dota 2</option>
@@ -112,7 +110,6 @@ function joinRandomRoom() {
               <span class="relative block">
                 <EzcordMetaIcon v-if="selectedGoalIcon" :name="selectedGoalIcon" class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[18px] text-[#ffd447]" />
                 <select v-model="goalFilter" class="h-11 w-full appearance-none rounded-[13px] border border-ez-field-line bg-ez-field py-0 pl-10 pr-8 text-sm font-extrabold text-ez-ink outline-none focus:border-ez-green focus:ring-4 focus:ring-ez-green/20">
-                  <option value="all">Любая цель</option>
                   <option value="communication">Общение</option>
                   <option value="result">Результат</option>
                 </select>
