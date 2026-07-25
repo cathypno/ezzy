@@ -4,6 +4,10 @@ import chestClosed from "~/assets/ezcord/chest/chest-closed.webp";
 import chestOpen from "~/assets/ezcord/chest/chest-open.webp";
 
 const props = defineProps<{
+  disabled?: boolean;
+  hitCount: number;
+  hitRunId: number;
+  hitTarget: number;
   lobbyUnlocked: boolean;
   rewardCoins: number | null;
   runId: number;
@@ -11,6 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   done: [];
+  hit: [];
 }>();
 
 const OPEN_REVEAL_MS = 260;
@@ -20,10 +25,12 @@ const isOpen = ref(false);
 const isOpening = ref(false);
 const burst = ref(false);
 const flash = ref(false);
+const hitPulse = ref(false);
 const hasFrameError = ref(false);
 let openTimer = 0;
 let doneTimer = 0;
 let flashTimer = 0;
+let hitTimer = 0;
 
 const particles = Array.from({ length: 18 }, (_, index) => {
   const angle = (-164 + (index / 17) * 148) * (Math.PI / 180);
@@ -56,6 +63,30 @@ watch(
     if (runId > 0 && runId !== previousRunId) playOpen();
   },
 );
+
+watch(
+  () => props.hitRunId,
+  (hitRunId, previousHitRunId) => {
+    if (hitRunId > 0 && hitRunId !== previousHitRunId) playHit();
+  },
+);
+
+function playHit() {
+  if (isOpen.value) return;
+  if (hitTimer) {
+    window.clearTimeout(hitTimer);
+    hitTimer = 0;
+  }
+
+  hitPulse.value = false;
+  window.requestAnimationFrame(() => {
+    hitPulse.value = true;
+    hitTimer = window.setTimeout(() => {
+      hitPulse.value = false;
+      hitTimer = 0;
+    }, 300);
+  });
+}
 
 function playOpen() {
   clearTimers();
@@ -93,13 +124,25 @@ function clearTimers() {
     window.clearTimeout(flashTimer);
     flashTimer = 0;
   }
+  if (hitTimer) {
+    window.clearTimeout(hitTimer);
+    hitTimer = 0;
+  }
+  hitPulse.value = false;
 }
 
 onBeforeUnmount(clearTimers);
 </script>
 
 <template>
-  <div class="relative mx-auto aspect-square w-full max-w-[360px] select-none overflow-visible max-[560px]:max-w-[300px]">
+  <button
+    class="group relative mx-auto aspect-square w-full max-w-[360px] select-none overflow-visible rounded-[24px] text-left outline-none transition disabled:cursor-default max-[560px]:max-w-[300px]"
+    :class="disabled ? '' : 'cursor-pointer focus-visible:ring-4 focus-visible:ring-ez-green/25'"
+    :disabled="disabled"
+    type="button"
+    aria-label="Ударить по сундуку"
+    @click="emit('hit')"
+  >
     <div class="absolute left-1/2 top-[54%] h-[72%] w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ez-green/20 blur-[58px] transition-opacity duration-300" :class="isOpen ? 'opacity-100' : 'opacity-45'"></div>
     <div class="absolute left-1/2 top-[52%] h-[84%] w-[84%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[conic-gradient(from_0deg,transparent_0_9deg,rgba(99,226,30,.32)_9deg_12deg,transparent_12deg_30deg)] opacity-0 mix-blend-screen [mask:radial-gradient(circle,transparent_22%,#000_42%,transparent_74%)]" :class="isOpen ? 'animate-[ez-chest-spin_20s_linear_infinite] opacity-100' : ''"></div>
     <div class="absolute bottom-[12%] left-1/2 h-10 w-[68%] -translate-x-1/2 rounded-full bg-black/70 blur-[12px]"></div>
@@ -109,7 +152,7 @@ onBeforeUnmount(clearTimers);
       class="relative z-10 h-full w-full object-contain transition-[opacity,transform,filter] duration-300 ease-out drop-shadow-[0_28px_38px_rgba(0,0,0,.58)]"
       :class="[
         isOpen ? 'scale-[.96] -translate-y-1 opacity-0' : 'scale-100 opacity-100',
-        isOpening && !isOpen ? 'animate-[ez-chest-rumble_.28s_ease-in-out_both]' : '',
+        (isOpening && !isOpen) || hitPulse ? 'animate-[ez-chest-rumble_.28s_ease-in-out_both]' : '',
       ]"
       :src="chestClosed"
       alt=""
@@ -148,6 +191,15 @@ onBeforeUnmount(clearTimers);
       Лобби открыто
     </div>
 
+    <div v-if="hitCount > 0 && !isOpen" class="absolute bottom-[7%] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-ez-green/30 bg-black/55 px-3 py-2 backdrop-blur-[12px]">
+      <span
+        v-for="index in hitTarget"
+        :key="index"
+        class="block h-2 w-6 rounded-full transition"
+        :class="index <= hitCount ? 'bg-ez-green shadow-[0_0_10px_rgba(99,226,30,.65)]' : 'bg-white/14'"
+      ></span>
+    </div>
+
     <div v-if="burst" class="pointer-events-none absolute left-1/2 top-[44%] z-30 h-0 w-0">
       <span
         v-for="particle in particles"
@@ -176,5 +228,5 @@ onBeforeUnmount(clearTimers);
     </div>
 
     <div v-if="flash" class="pointer-events-none fixed inset-0 z-[70] bg-[radial-gradient(circle_at_50%_42%,rgba(238,255,229,.88),rgba(238,255,229,0)_58%)]"></div>
-  </div>
+  </button>
 </template>

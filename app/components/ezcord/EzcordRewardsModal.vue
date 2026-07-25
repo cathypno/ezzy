@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import EzcordChestAnimation from "~/components/ezcord/EzcordChestAnimation.vue";
 import type { ChestOpening, ChestState, User } from "~/types/ezcord";
 import { formatEzcordPoints, getEzcordChestCost, getEzcordUserCoins, getEzcordUserLevel } from "~/utils/ezcord";
@@ -14,13 +14,19 @@ const emit = defineEmits<{
   "update-user": [user: User];
 }>();
 
+const HITS_TO_OPEN = 4;
+const HIT_RESET_MS = 1100;
+
 const chest = ref<ChestState | null>(null);
 const errorMessage = ref("");
+const chestHitCount = ref(0);
+const hitRunId = ref(0);
 const isAnimating = ref(false);
 const isLoading = ref(false);
 const isOpening = ref(false);
 const openingResult = ref<ChestOpening | null>(null);
 const runId = ref(0);
+let hitResetTimer = 0;
 
 const coins = computed(() => getEzcordUserCoins(props.user));
 const level = computed(() => getEzcordUserLevel(props.user));
@@ -33,7 +39,8 @@ const buttonLabel = computed(() => {
   if (isAnimating.value) return "Награда";
   if (!chest.value) return "Обновить";
   if (!chest.value.canOpen) return `Нужно еще ${missingCoins.value}`;
-  return `Открыть за ${nextCost.value}`;
+  if (chestHitCount.value > 0) return `Ударить ${chestHitCount.value}/${HITS_TO_OPEN}`;
+  return `Ударить сундук`;
 });
 
 watch(
@@ -47,9 +54,12 @@ watch(
     errorMessage.value = "";
     openingResult.value = null;
     isAnimating.value = false;
+    clearHitProgress();
   },
   { immediate: true },
 );
+
+onBeforeUnmount(clearHitProgress);
 
 async function loadChest() {
   if (!props.user || isLoading.value) return;
@@ -68,6 +78,40 @@ async function loadChest() {
   }
 }
 
+function registerChestHit() {
+  if (!props.user || isLoading.value || isOpening.value || isAnimating.value) return;
+  if (!chest.value) {
+    void loadChest();
+    return;
+  }
+  if (!chest.value.canOpen) return;
+
+  errorMessage.value = "";
+  hitRunId.value += 1;
+  window.clearTimeout(hitResetTimer);
+
+  const nextHitCount = chestHitCount.value + 1;
+  if (nextHitCount >= HITS_TO_OPEN) {
+    chestHitCount.value = 0;
+    void openChest();
+    return;
+  }
+
+  chestHitCount.value = nextHitCount;
+  hitResetTimer = window.setTimeout(() => {
+    chestHitCount.value = 0;
+    hitResetTimer = 0;
+  }, HIT_RESET_MS);
+}
+
+function clearHitProgress() {
+  if (hitResetTimer) {
+    window.clearTimeout(hitResetTimer);
+    hitResetTimer = 0;
+  }
+  chestHitCount.value = 0;
+}
+
 async function openChest() {
   if (!props.user || isOpening.value || isAnimating.value) return;
   if (!chest.value) {
@@ -76,6 +120,7 @@ async function openChest() {
   }
   if (!chest.value.canOpen) return;
 
+  clearHitProgress();
   errorMessage.value = "";
   isOpening.value = true;
   openingResult.value = null;
@@ -116,10 +161,15 @@ async function openChest() {
           <div class="grid items-center gap-5 [grid-template-columns:minmax(0,1.18fr)_minmax(260px,.82fr)] max-[760px]:grid-cols-1">
             <div class="rounded-[20px] border border-ez-line bg-black/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
               <EzcordChestAnimation
+                :disabled="!canPressButton"
+                :hit-count="chestHitCount"
+                :hit-run-id="hitRunId"
+                :hit-target="HITS_TO_OPEN"
                 :lobby-unlocked="Boolean(openingResult?.lobbyUnlocked)"
                 :reward-coins="openingResult?.coinsAwarded ?? null"
                 :run-id="runId"
                 @done="isAnimating = false"
+                @hit="registerChestHit"
               />
             </div>
 
@@ -167,7 +217,7 @@ async function openChest() {
                 class="inline-flex min-h-[54px] items-center justify-center rounded-[16px] border border-ez-green/35 bg-ez-green px-5 text-[16px] font-black text-[#082900] shadow-[0_22px_44px_-24px_rgba(99,226,30,.8)] transition hover:-translate-y-px disabled:cursor-default disabled:border-ez-line disabled:bg-ez-card disabled:text-ez-muted disabled:shadow-none disabled:hover:translate-y-0"
                 :disabled="!canPressButton"
                 type="button"
-                @click="openChest"
+                @click="registerChestHit"
               >
                 {{ buttonLabel }}
               </button>
