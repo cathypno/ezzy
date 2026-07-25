@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { User } from "~/types/ezcord";
-import { formatEzcordPoints, getEzcordUserCoins, getEzcordUserLevel } from "~/utils/ezcord";
+import {
+  canOpenEzcordChest,
+  formatEzcordPoints,
+  getEzcordUserCoins,
+  getEzcordUserLevel,
+} from "~/utils/ezcord";
 
-defineProps<{
+const props = defineProps<{
   canUseLobby: boolean;
   user: User | null;
 }>();
@@ -15,6 +21,8 @@ const emit = defineEmits<{
 function openLobby() {
   emit("open-lobby");
 }
+
+const hasAvailableChest = computed(() => canOpenEzcordChest(props.user));
 </script>
 
 <template>
@@ -32,7 +40,7 @@ function openLobby() {
 
       <div class="relative flex shrink-0 items-center gap-2.5">
         <button
-          v-if="user && canUseLobby"
+          v-if="props.user && props.canUseLobby"
           class="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-2xl border border-ez-line bg-ez-card text-[24px] text-ez-green shadow-ez transition hover:-translate-y-px hover:border-ez-green/45 max-[760px]:h-[50px] max-[760px]:w-[50px]"
           type="button"
           aria-label="Открыть лобби"
@@ -46,16 +54,17 @@ function openLobby() {
         </button>
 
         <button
-          v-if="user"
-          class="inline-flex min-h-[54px] items-center gap-3 rounded-2xl border border-ez-line bg-ez-card px-4 py-2 text-left shadow-ez transition hover:-translate-y-px max-[760px]:min-h-[50px] max-[760px]:px-3"
+          v-if="props.user"
+          class="relative inline-flex min-h-[54px] items-center gap-3 rounded-2xl border border-ez-line bg-ez-card px-4 py-2 text-left shadow-ez transition hover:-translate-y-px max-[760px]:min-h-[50px] max-[760px]:px-3"
           type="button"
           aria-label="Звезды и уровень"
           title="Звезды"
           @click="emit('open-rewards')"
         >
+          <span v-if="hasAvailableChest" class="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-2 border-[#0b0e0b] bg-[#ff3b4f] shadow-[0_0_14px_rgba(255,59,79,.78)]" aria-hidden="true"></span>
           <span class="grid min-w-[74px] leading-none max-[760px]:min-w-[62px]">
-            <span class="flex items-center gap-1.5 text-[26px] font-black text-ez-green max-[760px]:text-[22px]">{{ formatEzcordPoints(getEzcordUserCoins(user)) }}</span>
-            <span class="mt-1 text-[11px] font-black uppercase tracking-[0.08em] text-ez-muted max-[760px]:text-[10px]">Level {{ getEzcordUserLevel(user) }}</span>
+            <span class="flex items-center gap-1.5 text-[26px] font-black text-ez-green max-[760px]:text-[22px]">{{ formatEzcordPoints(getEzcordUserCoins(props.user)) }}</span>
+            <span class="mt-1 text-[11px] font-black uppercase tracking-[0.08em] text-ez-muted max-[760px]:text-[10px]">Level {{ getEzcordUserLevel(props.user) }}</span>
           </span>
           <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[12px] border border-[#ffd447]/25 bg-[#ffd447]/10 text-[21px] text-[#ffd447] max-[760px]:h-8 max-[760px]:w-8" aria-hidden="true">
             <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">

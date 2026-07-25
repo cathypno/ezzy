@@ -41,6 +41,15 @@ const nextCost = computed(
     getEzcordChestCost(props.user?.chestOpenCount || 0),
 );
 const missingCoins = computed(() => Math.max(0, nextCost.value - coins.value));
+const progressPercent = computed(() =>
+  Math.min(100, (coins.value / Math.max(1, nextCost.value)) * 100),
+);
+const shouldShowChest = computed(() =>
+  Boolean(chest.value?.canOpen || isOpening.value || isAnimating.value),
+);
+const progressIsPartial = computed(
+  () => progressPercent.value > 0 && progressPercent.value < 100,
+);
 const canPressButton = computed(() =>
   Boolean(
     !isLoading.value &&
@@ -213,6 +222,7 @@ async function openChest() {
               class="rounded-[20px] border border-ez-line bg-black/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]"
             >
               <EzcordChestAnimation
+                v-if="shouldShowChest"
                 :disabled="!canPressButton"
                 :hit-count="chestHitCount"
                 :hit-run-id="hitRunId"
@@ -223,6 +233,23 @@ async function openChest() {
                 @done="isAnimating = false"
                 @hit="registerChestHit"
               />
+              <div v-else class="grid min-h-[300px] place-items-center rounded-[18px] border border-ez-line bg-[radial-gradient(circle_at_50%_20%,rgba(99,226,30,.12),transparent_42%),rgba(255,255,255,.02)] px-5 text-center max-[560px]:min-h-[250px]">
+                <div class="mx-auto max-w-[330px]">
+                  <div class="mx-auto grid h-16 w-16 place-items-center rounded-2xl border border-ez-line bg-ez-card text-[30px] text-ez-muted shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+                      <path d="M0 0h24v24H0z" fill="none" />
+                      <path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5m-3 7V7a3 3 0 1 1 6 0v2zm4 5.73V17a1 1 0 1 1-2 0v-2.27a2 2 0 1 1 2 0" />
+                    </svg>
+                  </div>
+                  <p class="mt-4 text-[20px] font-black leading-none text-ez-ink">{{ isLoading ? "Проверяем сундук" : "Сундук пока закрыт" }}</p>
+                  <p class="mx-auto mt-2 text-sm font-extrabold leading-[1.45] text-ez-muted">
+                    {{ isLoading ? "Считаем баланс и стоимость следующего открытия." : "Как только наберете достаточно монет, появится возможность открыть сундук." }}
+                  </p>
+                  <p v-if="!isLoading && missingCoins > 0" class="mt-4 inline-flex rounded-full border border-[#ffd447]/25 bg-[#ffd447]/10 px-3 py-1.5 text-xs font-black text-[#ffd447]">
+                    Осталось {{ missingCoins }} монет
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div class="grid gap-3">
@@ -275,8 +302,9 @@ async function openChest() {
                 >
                   <div
                     class="h-full rounded-full bg-ez-green transition-[width] duration-300"
+                    :class="progressIsPartial ? 'ez-chest-progress-fill' : ''"
                     :style="{
-                      width: `${Math.min(100, (coins / Math.max(1, nextCost)) * 100)}%`,
+                      width: `${progressPercent}%`,
                     }"
                   ></div>
                 </div>

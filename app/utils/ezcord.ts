@@ -38,3 +38,7 @@ export function getEzcordUserLevel(user?: { level?: number; xp?: number; points?
 export function getEzcordChestCost(openCount = 0) {
   return [5, 25, 75][openCount] || 150;
 }
+
+export function canOpenEzcordChest(user?: { chestOpenCount?: number; coins?: number; points?: number } | null) {
+  return getEzcordUserCoins(user) >= getEzcordChestCost(user?.chestOpenCount || 0);
+}
