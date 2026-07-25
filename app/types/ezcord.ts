@@ -7,6 +7,11 @@ export interface User {
   email: string;
   displayName: string;
   points: number;
+  coins: number;
+  xp: number;
+  level: number;
+  lobbyUnlocked: boolean;
+  chestOpenCount: number;
   telegram?: {
     id: number;
     username?: string;
@@ -14,6 +19,24 @@ export interface User {
     lastName?: string;
     photoUrl?: string;
   };
+}
+
+export interface ChestState {
+  openCount: number;
+  nextCost: number;
+  canOpen: boolean;
+  minReward: number;
+  maxReward: number;
+  lobbyUnlockAvailable: boolean;
+}
+
+export interface ChestOpening {
+  index: number;
+  cost: number;
+  coinsAwarded: number;
+  xpAwarded: number;
+  lobbyUnlocked: boolean;
+  nextCost: number;
 }
 
 export interface Room {

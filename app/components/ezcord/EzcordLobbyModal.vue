@@ -47,7 +47,8 @@ function joinRandomRoom() {
     return;
   }
 
-  emit("join", pool[Math.floor(Math.random() * pool.length)]);
+  const room = pool[Math.floor(Math.random() * pool.length)];
+  if (room) emit("join", room);
 }
 </script>
 

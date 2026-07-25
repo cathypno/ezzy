@@ -25,13 +25,14 @@ export function useEzcordVisualizerBars(options: VisualizerBarOptions = {}) {
   onMounted(() => {
     updateVisualizerWidth();
 
+    const targetWindow = window;
     if ("ResizeObserver" in window) {
       resizeObserver = new ResizeObserver(updateVisualizerWidth);
       if (visualizerElement.value) resizeObserver.observe(visualizerElement.value);
       return;
     }
 
-    window.addEventListener("resize", updateVisualizerWidth);
+    targetWindow.addEventListener("resize", updateVisualizerWidth);
   });
 
   onBeforeUnmount(() => {

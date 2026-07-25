@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { EZCORD_LOBBY_UNLOCK_XP } from "./economy";
 import { getEzcordEnv } from "./env";
 import { getEzcordDataPath, readEzcordData } from "./json-store";
 import { toIso } from "./id";
@@ -38,6 +39,10 @@ async function ensurePgSchema(pool: any): Promise<void> {
         password_hash text not null,
         display_name text not null,
         points integer not null default 0,
+        coins integer not null default 0,
+        xp integer not null default 0,
+        chest_open_count integer not null default 0,
+        lobby_unlocked_at timestamptz,
         created_at timestamptz not null,
         activity_reward_last_seen_at timestamptz,
         activity_reward_last_awarded_at timestamptz,
@@ -57,6 +62,17 @@ async function ensurePgSchema(pool: any): Promise<void> {
         points integer not null,
         created_at timestamptz not null,
         unique (user_id, kind, dedupe_key)
+      );
+
+      create table if not exists ezcord_chest_openings (
+        id text primary key,
+        user_id text not null references ezcord_users(id) on delete cascade,
+        open_index integer not null,
+        cost integer not null,
+        coins_awarded integer not null,
+        xp_awarded integer not null default 0,
+        lobby_unlocked boolean not null default false,
+        created_at timestamptz not null
       );
 
       create table if not exists ezcord_sessions (
@@ -90,6 +106,10 @@ async function ensurePgSchema(pool: any): Promise<void> {
       );
 
       alter table ezcord_users add column if not exists points integer not null default 0;
+      alter table ezcord_users add column if not exists coins integer not null default 0;
+      alter table ezcord_users add column if not exists xp integer not null default 0;
+      alter table ezcord_users add column if not exists chest_open_count integer not null default 0;
+      alter table ezcord_users add column if not exists lobby_unlocked_at timestamptz;
       alter table ezcord_users add column if not exists activity_reward_last_seen_at timestamptz;
       alter table ezcord_users add column if not exists activity_reward_last_awarded_at timestamptz;
       alter table ezcord_rooms add column if not exists game text not null default 'voicechat';
@@ -108,12 +128,35 @@ async function ensurePgSchema(pool: any): Promise<void> {
       create index if not exists ezcord_sessions_user_id_idx on ezcord_sessions(user_id);
       create index if not exists ezcord_telegram_login_requests_expires_idx on ezcord_telegram_login_requests(expires_at);
       create index if not exists ezcord_point_events_user_id_idx on ezcord_point_events(user_id);
+      create index if not exists ezcord_chest_openings_user_id_idx on ezcord_chest_openings(user_id);
     `);
 
+    await migrateEconomyV2(pool);
     await migrateJsonToPostgres(pool);
   })();
 
   return pgSchemaPromise;
+}
+
+async function migrateEconomyV2(pool: any): Promise<void> {
+  const meta = await pool.query("select value from ezcord_meta where key = 'economy_v2_migrated'");
+  if (meta.rowCount > 0) return;
+
+  await pool.query(
+    `update ezcord_users
+        set coins = greatest(coins, points),
+            xp = greatest(xp, points),
+            lobby_unlocked_at = case
+              when lobby_unlocked_at is null and greatest(xp, points) >= $1 then now()
+              else lobby_unlocked_at
+            end`,
+    [EZCORD_LOBBY_UNLOCK_XP],
+  );
+
+  await pool.query(
+    "insert into ezcord_meta (key, value) values ('economy_v2_migrated', $1) on conflict (key) do update set value = excluded.value",
+    [new Date().toISOString()],
+  );
 }
 
 async function migrateJsonToPostgres(pool: any): Promise<void> {
@@ -126,8 +169,8 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
     for (const user of data.users) {
       await pool.query(
         `insert into ezcord_users
-          (id, email, password_hash, display_name, points, created_at, activity_reward_last_seen_at, activity_reward_last_awarded_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          (id, email, password_hash, display_name, points, coins, xp, chest_open_count, lobby_unlocked_at, created_at, activity_reward_last_seen_at, activity_reward_last_awarded_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          on conflict (id) do nothing`,
         [
           user.id,
@@ -135,6 +178,10 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
           user.passwordHash,
           user.displayName,
           user.points || 0,
+          user.coins ?? user.points ?? 0,
+          user.xp ?? user.points ?? 0,
+          user.chestOpenCount || 0,
+          user.lobbyUnlockedAt,
           user.createdAt,
           user.activityRewardLastSeenAt,
           user.activityRewardLastAwardedAt,
@@ -174,6 +221,25 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
         [kicked.roomId, kicked.userId, kicked.kickedBy, kicked.kickedAt],
       ).catch(() => {});
     }
+
+    for (const opening of data.chestOpenings) {
+      await pool.query(
+        `insert into ezcord_chest_openings
+          (id, user_id, open_index, cost, coins_awarded, xp_awarded, lobby_unlocked, created_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)
+         on conflict (id) do nothing`,
+        [
+          opening.id,
+          opening.userId,
+          opening.openIndex,
+          opening.cost,
+          opening.coinsAwarded,
+          opening.xpAwarded,
+          opening.lobbyUnlocked,
+          opening.createdAt,
+        ],
+      ).catch(() => {});
+    }
   }
 
   await pool.query("insert into ezcord_meta (key, value) values ('json_migrated', $1) on conflict (key) do update set value = excluded.value", [
@@ -200,6 +266,10 @@ export function rowToUser(row: any): EzcordUser {
     passwordHash: row.password_hash,
     displayName: row.display_name,
     points: Number(row.points || 0),
+    coins: Number(row.coins ?? row.points ?? 0),
+    xp: Number(row.xp ?? row.points ?? 0),
+    chestOpenCount: Number(row.chest_open_count || 0),
+    lobbyUnlockedAt: row.lobby_unlocked_at ? toIso(row.lobby_unlocked_at) : undefined,
     createdAt: toIso(row.created_at),
     activityRewardLastSeenAt: row.activity_reward_last_seen_at ? toIso(row.activity_reward_last_seen_at) : undefined,
     activityRewardLastAwardedAt: row.activity_reward_last_awarded_at ? toIso(row.activity_reward_last_awarded_at) : undefined,

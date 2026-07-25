@@ -21,6 +21,7 @@ export function readEzcordData(): EzcordData {
       kickedPeers: [],
       telegramLoginRequests: [],
       pointEvents: [],
+      chestOpenings: [],
     };
     writeEzcordData(initial);
     return initial;
@@ -28,10 +29,18 @@ export function readEzcordData(): EzcordData {
 
   const data = JSON.parse(readFileSync(path, "utf-8")) as Partial<EzcordData>;
   return {
-    users: (data.users || []).map((user) => ({
-      ...user,
-      points: user.points || 0,
-    })),
+    users: (data.users || []).map((user) => {
+      const points = user.points || 0;
+      const xp = user.xp ?? points;
+      return {
+        ...user,
+        points,
+        coins: user.coins ?? points,
+        xp,
+        chestOpenCount: user.chestOpenCount || 0,
+        lobbyUnlockedAt: user.lobbyUnlockedAt,
+      };
+    }),
     sessions: data.sessions || [],
     rooms: (data.rooms || []).map((room) => ({
       ...room,
@@ -44,6 +53,7 @@ export function readEzcordData(): EzcordData {
     kickedPeers: data.kickedPeers || [],
     telegramLoginRequests: data.telegramLoginRequests || [],
     pointEvents: data.pointEvents || [],
+    chestOpenings: data.chestOpenings || [],
   };
 }
 

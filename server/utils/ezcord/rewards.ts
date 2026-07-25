@@ -1,4 +1,5 @@
 import { createError } from "h3";
+import { normalizeEzcordUserEconomy } from "./economy";
 import { usePostgresStore } from "./env";
 import { getPgPool, rowToUser } from "./postgres";
 import { readEzcordData, writeEzcordData } from "./json-store";
@@ -32,6 +33,8 @@ export async function touchEzcordActivityReward(userId: string): Promise<EzcordU
       const updated = await client.query(
         `update ezcord_users
             set points = points + $1,
+                coins = coins + $1,
+                xp = xp + $1,
                 activity_reward_last_seen_at = $2,
                 activity_reward_last_awarded_at = $3
           where id = $4
@@ -55,7 +58,10 @@ export async function touchEzcordActivityReward(userId: string): Promise<EzcordU
   }
 
   const reward = calculateActivityReward(user, now);
+  normalizeEzcordUserEconomy(user);
   user.points = (user.points || 0) + reward.points;
+  user.coins = (user.coins || 0) + reward.points;
+  user.xp = (user.xp || 0) + reward.points;
   user.activityRewardLastSeenAt = reward.lastSeenAt;
   user.activityRewardLastAwardedAt = reward.lastAwardedAt;
   writeEzcordData(data);
@@ -80,7 +86,7 @@ async function awardEzcordPointsOnce(userId: string, points: number, kind: strin
 
       const result =
         inserted.rowCount > 0
-          ? await client.query("update ezcord_users set points = points + $1 where id = $2 returning *", [points, userId])
+          ? await client.query("update ezcord_users set points = points + $1, coins = coins + $1, xp = xp + $1 where id = $2 returning *", [points, userId])
           : await client.query("select * from ezcord_users where id = $1", [userId]);
 
       await client.query("commit");
@@ -96,6 +102,7 @@ async function awardEzcordPointsOnce(userId: string, points: number, kind: strin
   const data = readEzcordData();
   const user = data.users.find((item) => item.id === userId);
   if (!user) return null;
+  normalizeEzcordUserEconomy(user);
 
   const exists = data.pointEvents.some((event) => event.userId === userId && event.kind === kind && event.dedupeKey === dedupeKey);
   if (!exists) {
@@ -108,6 +115,8 @@ async function awardEzcordPointsOnce(userId: string, points: number, kind: strin
       createdAt: now,
     });
     user.points = (user.points || 0) + points;
+    user.coins = (user.coins || 0) + points;
+    user.xp = (user.xp || 0) + points;
     writeEzcordData(data);
   }
   return user;

@@ -684,7 +684,7 @@ export function useEzcordVoice({
     if (!audio) {
       audio = document.createElement("audio");
       audio.autoplay = true;
-      audio.playsInline = true;
+      audio.setAttribute("playsinline", "true");
       audio.dataset.peerId = peerId;
       audioSink.value?.appendChild(audio);
       remoteAudios.set(peerId, audio);

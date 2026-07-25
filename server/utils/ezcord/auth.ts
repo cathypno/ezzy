@@ -1,6 +1,7 @@
 import { scryptSync, randomBytes } from "node:crypto";
 import { createError, deleteCookie, getCookie, setCookie, type H3Event } from "h3";
 import { usePostgresStore } from "./env";
+import { getEzcordLevelFromXp, isEzcordLobbyUnlocked, normalizeEzcordUserEconomy } from "./economy";
 import { getPgPool, rowToUser } from "./postgres";
 import { readEzcordData, writeEzcordData, findJsonUserByEmail } from "./json-store";
 import { randomId, normalizeEmail, isValidEmail, safeEqual } from "./id";
@@ -11,11 +12,19 @@ export const EZCORD_SESSION_COOKIE = "ezcord_session";
 const TELEGRAM_EMAIL_DOMAIN = "telegram.ezcord.local";
 
 export function publicEzcordUser(user: EzcordUser): EzcordPublicUser {
+  const normalized = normalizeEzcordUserEconomy({ ...user });
+  const level = getEzcordLevelFromXp(normalized.xp);
+
   return {
     id: user.id,
     email: isSyntheticTelegramEmail(user.email) ? "" : user.email,
     displayName: user.displayName,
-    points: user.points || 0,
+    points: normalized.coins,
+    coins: normalized.coins,
+    xp: normalized.xp,
+    level,
+    lobbyUnlocked: isEzcordLobbyUnlocked(normalized),
+    chestOpenCount: normalized.chestOpenCount,
     telegram: user.telegram,
   };
 }
@@ -126,12 +135,16 @@ export async function createEzcordUser(email: string, password: string, displayN
     throw createError({ statusCode: 400, message: "Пароль должен быть не короче 8 символов" });
   }
 
+  const fallbackDisplayName = normalizedEmail.split("@")[0] || normalizedEmail;
   const user: EzcordUser = {
     id: randomId("user"),
     email: normalizedEmail,
     passwordHash: hashPassword(password),
-    displayName: displayName.trim() || normalizedEmail.split("@")[0],
+    displayName: displayName.trim() || fallbackDisplayName,
     points: 0,
+    coins: 0,
+    xp: 0,
+    chestOpenCount: 0,
     createdAt: new Date().toISOString(),
   };
 
@@ -192,6 +205,9 @@ export async function getOrCreateEzcordTelegramUserFromPayload(telegramUser: Ezc
     passwordHash: hashPassword(randomId("telegram")),
     displayName,
     points: 0,
+    coins: 0,
+    xp: 0,
+    chestOpenCount: 0,
     createdAt: new Date().toISOString(),
     telegram: identity,
   };

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import type { ComponentPublicInstance } from "vue";
 import { useEzcordVisualizerBars } from "~/composables/useEzcordVisualizerBars";
 import type { Peer, Room } from "~/types/ezcord";
 import { getInitials } from "~/utils/ezcord";
@@ -46,6 +47,10 @@ function hideBrokenAvatar(event: Event) {
 
 function isPeerSpeaking(peerId: string) {
   return props.speakingPeerIds.includes(peerId);
+}
+
+function setAudioSinkRef(element: Element | ComponentPublicInstance | null) {
+  props.setAudioSink(element instanceof HTMLElement ? element : null);
 }
 
 const { barCount, barGridStyle, visualizerElement } = useEzcordVisualizerBars();
@@ -176,6 +181,6 @@ const visualizerBars = computed(() =>
       </button>
     </div>
 
-    <div :ref="props.setAudioSink" class="pointer-events-none fixed left-0 top-0 h-0 w-0 overflow-hidden opacity-0"></div>
+    <div :ref="setAudioSinkRef" class="pointer-events-none fixed left-0 top-0 h-0 w-0 overflow-hidden opacity-0"></div>
   </section>
 </template>

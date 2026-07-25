@@ -4,11 +4,12 @@ import EzcordAuthScreen from "~/components/ezcord/EzcordAuthScreen.vue";
 import EzcordBootScreen from "~/components/ezcord/EzcordBootScreen.vue";
 import EzcordHeader from "~/components/ezcord/EzcordHeader.vue";
 import EzcordLobbyModal from "~/components/ezcord/EzcordLobbyModal.vue";
+import EzcordRewardsModal from "~/components/ezcord/EzcordRewardsModal.vue";
 import EzcordRoomPendingScreen from "~/components/ezcord/EzcordRoomPendingScreen.vue";
 import EzcordRoomScreen from "~/components/ezcord/EzcordRoomScreen.vue";
 import { useEzcordVoice } from "~/composables/useEzcordVoice";
 import type { Room, RoomGame, RoomGoal, User } from "~/types/ezcord";
-import { getEzcordLevel, getInitials } from "~/utils/ezcord";
+import { getEzcordUserLevel, getInitials } from "~/utils/ezcord";
 import { decodeEzcordRoomLaunch } from "#shared/ezcord-launch";
 
 const route = useRoute();
@@ -32,6 +33,7 @@ const telegramInviteCode = ref("");
 const lobbyOpen = ref(false);
 const lobbyRooms = ref<Room[]>([]);
 const isLobbyLoading = ref(false);
+const rewardsOpen = ref(false);
 let telegramLoginTimer = 0;
 let telegramLoginPollInFlight = false;
 let rewardsTimer = 0;
@@ -74,7 +76,7 @@ const {
 });
 
 const participantCount = computed(() => peers.value.length + (isWaiting.value ? 0 : user.value ? 1 : 0));
-const canUseLobby = computed(() => Boolean(user.value && getEzcordLevel(user.value.points) >= 2));
+const canUseLobby = computed(() => Boolean(user.value && (user.value.lobbyUnlocked || getEzcordUserLevel(user.value) >= 2)));
 const visibleMicOn = computed(() => isMicOn.value);
 const visibleMicLevel = computed(() => micLevel.value);
 const userInitial = computed(() => getInitials(user.value?.displayName || user.value?.email || "E"));
@@ -328,6 +330,10 @@ function handleToggleMic() {
   void toggleMic();
 }
 
+function handleRewardsUserUpdate(nextUser: User) {
+  user.value = nextUser;
+}
+
 function handleKickPeer(peerId: string) {
   void kickPeer(peerId);
 }
@@ -493,7 +499,7 @@ useHead({
 
 <template>
   <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
-    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" />
+    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" @open-rewards="rewardsOpen = true" />
 
     <div class="min-h-[calc(100vh-74px)]">
       <EzcordBootScreen v-if="isBooting" />
@@ -566,6 +572,13 @@ useHead({
       @close="lobbyOpen = false"
       @empty="handleEmptyLobbyFilter"
       @join="joinLobbyRoom"
+    />
+
+    <EzcordRewardsModal
+      :open="rewardsOpen"
+      :user="user"
+      @close="rewardsOpen = false"
+      @update-user="handleRewardsUserUpdate"
     />
   </main>
 </template>

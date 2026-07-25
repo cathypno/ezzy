@@ -23,11 +23,11 @@ export async function touchEzcordPeer(roomId: string, peerId: string, user: Ezco
     const redis = await getRedis();
     const key = roomPeersKey(roomId);
     const existingPeers = (await redis.hvals(key)).map((value: string) => JSON.parse(value) as EzcordPeer);
-    const duplicatePeerIds = existingPeers.filter((item: EzcordPeer) => item.userId === user.id && item.peerId !== peerId).map((item) => item.peerId);
+    const duplicatePeerIds = existingPeers.filter((item: EzcordPeer) => item.userId === user.id && item.peerId !== peerId).map((item: EzcordPeer) => item.peerId);
 
     if (duplicatePeerIds.length > 0) {
       await redis.hdel(key, ...duplicatePeerIds);
-      await Promise.all(duplicatePeerIds.map((duplicatePeerId) => deleteSignalKeys(roomId, duplicatePeerId)));
+      await Promise.all(duplicatePeerIds.map((duplicatePeerId: string) => deleteSignalKeys(roomId, duplicatePeerId)));
     }
 
     const exists = await redis.hexists(key, peerId);

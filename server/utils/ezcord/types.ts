@@ -9,6 +9,10 @@ export interface EzcordUser {
   passwordHash: string;
   displayName: string;
   points: number;
+  coins: number;
+  xp: number;
+  chestOpenCount: number;
+  lobbyUnlockedAt?: string;
   createdAt: string;
   activityRewardLastSeenAt?: string;
   activityRewardLastAwardedAt?: string;
@@ -103,6 +107,17 @@ export interface EzcordPointEvent {
   createdAt: string;
 }
 
+export interface EzcordChestOpening {
+  id: string;
+  userId: string;
+  openIndex: number;
+  cost: number;
+  coinsAwarded: number;
+  xpAwarded: number;
+  lobbyUnlocked: boolean;
+  createdAt: string;
+}
+
 export interface EzcordData {
   users: EzcordUser[];
   sessions: EzcordSession[];
@@ -113,6 +128,7 @@ export interface EzcordData {
   kickedPeers: EzcordKickedPeer[];
   telegramLoginRequests: EzcordTelegramLoginRequest[];
   pointEvents: EzcordPointEvent[];
+  chestOpenings: EzcordChestOpening[];
 }
 
 export interface EzcordPublicUser {
@@ -120,6 +136,11 @@ export interface EzcordPublicUser {
   email: string;
   displayName: string;
   points: number;
+  coins: number;
+  xp: number;
+  level: number;
+  lobbyUnlocked: boolean;
+  chestOpenCount: number;
   telegram?: EzcordTelegramIdentity;
 }
 

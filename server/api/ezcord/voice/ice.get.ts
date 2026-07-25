@@ -1,12 +1,18 @@
 import { createHmac } from "node:crypto";
 
+type EzcordIceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
+
 const TURN_CREDENTIAL_TTL_SECONDS = 60 * 60;
 
 export default defineEventHandler(async (event) => {
   await checkEzcordRateLimit(event, "voice_ice", 120);
   await requireEzcordUser(event);
 
-  const iceServers: RTCIceServer[] = [];
+  const iceServers: EzcordIceServer[] = [];
   const stunUrls = parseIceUrls(getEzcordEnv("EZCORD_STUN_URLS") || "stun:stun.l.google.com:19302");
   if (stunUrls.length > 0) {
     iceServers.push({ urls: stunUrls });
