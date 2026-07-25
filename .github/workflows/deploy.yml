@@ -103,7 +103,7 @@ jobs:
             rm -f public/ezcord-logo.png public/ezcord-mark.svg
             rm -f server/utils/ezcord.ts
             find app server public -name '._*' -type f -delete
-            bash -lc 'source /root/.nvm/nvm.sh && corepack enable && pnpm install --frozen-lockfile && pnpm run build && pm2 restart $REMOTE_PM2_APP --update-env'
+            bash -lc 'source /root/.nvm/nvm.sh && corepack enable && rm -rf node_modules package-lock.json && pnpm install --frozen-lockfile && pnpm run build && pm2 restart $REMOTE_PM2_APP --update-env'
           "
 
       - name: Health check
