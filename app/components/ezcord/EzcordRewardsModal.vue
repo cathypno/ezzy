@@ -45,7 +45,12 @@ const progressPercent = computed(() =>
   Math.min(100, (coins.value / Math.max(1, nextCost.value)) * 100),
 );
 const shouldShowChest = computed(() =>
-  Boolean(chest.value?.canOpen || isOpening.value || isAnimating.value),
+  Boolean(
+    chest.value?.canOpen ||
+      isOpening.value ||
+      isAnimating.value ||
+      openingResult.value,
+  ),
 );
 const progressIsPartial = computed(
   () => progressPercent.value > 0 && progressPercent.value < 100,
@@ -55,13 +60,17 @@ const canPressButton = computed(() =>
     !isLoading.value &&
     !isOpening.value &&
     !isAnimating.value &&
-    (!chest.value || chest.value.canOpen),
+    (Boolean(openingResult.value) || !chest.value || chest.value.canOpen),
   ),
+);
+const canHitChest = computed(
+  () => canPressButton.value && !Boolean(openingResult.value),
 );
 const buttonLabel = computed(() => {
   if (isLoading.value) return "Загрузка";
   if (isOpening.value) return "Открываем";
   if (isAnimating.value) return "Награда";
+  if (openingResult.value) return "Закрыть окно";
   if (!chest.value) return "Обновить";
   if (!chest.value.canOpen) return `Нужно еще ${missingCoins.value}`;
   if (chestHitCount.value > 0)
@@ -110,6 +119,7 @@ async function loadChest() {
 function registerChestHit() {
   if (!props.user || isLoading.value || isOpening.value || isAnimating.value)
     return;
+  if (openingResult.value) return;
   if (!chest.value) {
     void loadChest();
     return;
@@ -132,6 +142,15 @@ function registerChestHit() {
     chestHitCount.value = 0;
     hitResetTimer = 0;
   }, HIT_RESET_MS);
+}
+
+function handleChestAction() {
+  if (openingResult.value && !isOpening.value && !isAnimating.value) {
+    emit("close");
+    return;
+  }
+
+  registerChestHit();
 }
 
 function clearHitProgress() {
@@ -223,7 +242,7 @@ async function openChest() {
             >
               <EzcordChestAnimation
                 v-if="shouldShowChest"
-                :disabled="!canPressButton"
+                :disabled="!canHitChest"
                 :hit-count="chestHitCount"
                 :hit-run-id="hitRunId"
                 :hit-target="HITS_TO_OPEN"
@@ -244,9 +263,6 @@ async function openChest() {
                   <p class="mt-4 text-[20px] font-black leading-none text-ez-ink">{{ isLoading ? "Проверяем сундук" : "Сундук пока закрыт" }}</p>
                   <p class="mx-auto mt-2 text-sm font-extrabold leading-[1.45] text-ez-muted">
                     {{ isLoading ? "Считаем баланс и стоимость следующего открытия." : "Как только наберете достаточно монет, появится возможность открыть сундук." }}
-                  </p>
-                  <p v-if="!isLoading && missingCoins > 0" class="mt-4 inline-flex rounded-full border border-[#ffd447]/25 bg-[#ffd447]/10 px-3 py-1.5 text-xs font-black text-[#ffd447]">
-                    Осталось {{ missingCoins }} монет
                   </p>
                 </div>
               </div>
@@ -340,7 +356,7 @@ async function openChest() {
                 class="inline-flex min-h-[54px] items-center justify-center rounded-[16px] border border-ez-green/35 bg-ez-green px-5 text-[16px] font-black text-[#082900] shadow-[0_22px_44px_-24px_rgba(99,226,30,.8)] transition hover:-translate-y-px disabled:cursor-default disabled:border-ez-line disabled:bg-ez-card disabled:text-ez-muted disabled:shadow-none disabled:hover:translate-y-0"
                 :disabled="!canPressButton"
                 type="button"
-                @click="registerChestHit"
+                @click="handleChestAction"
               >
                 {{ buttonLabel }}
               </button>
