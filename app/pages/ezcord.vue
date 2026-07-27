@@ -504,7 +504,7 @@ useHead({
 
 <template>
   <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
-    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" @open-onboarding="openOnboarding" @open-rewards="rewardsOpen = true" />
+    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" @open-rewards="rewardsOpen = true" />
 
     <div class="min-h-[calc(100vh-74px)]">
       <EzcordBootScreen v-if="isBooting" />
@@ -585,6 +585,8 @@ useHead({
       @close="rewardsOpen = false"
       @update-user="handleRewardsUserUpdate"
     />
+
+    <EzcordFloatingHelpButton v-if="user" @click="openOnboarding" />
 
     <EzcordOnboardingModal
       :completing="onboardingCompleting"
