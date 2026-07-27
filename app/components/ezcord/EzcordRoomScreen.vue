@@ -27,6 +27,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  help: [];
   invite: [];
   kick: [peerId: string];
   "toggle-mic": [];
@@ -79,7 +80,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
 </script>
 
 <template>
-  <div class="px-[clamp(16px,2.55vw,52px)] pb-[42px] pt-7 max-[760px]:px-3.5">
+  <div class="relative px-[clamp(16px,2.55vw,52px)] pb-[96px] pt-7 max-[760px]:px-3.5">
     <div class="flex items-start justify-between gap-[18px]">
       <div>
         <p class="text-xs font-black uppercase leading-[1.2] text-ez-muted">Комната</p>
@@ -161,5 +162,7 @@ function saveSettings(settings: { name: string; game: RoomGame; goal: RoomGoal }
       @close="settingsOpen = false"
       @save="saveSettings"
     />
+
+    <EzcordFloatingHelpButton @click="$emit('help')" />
   </div>
 </template>

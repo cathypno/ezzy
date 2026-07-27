@@ -564,6 +564,7 @@ useHead({
         :waiting-count="waitingCount"
         :wave-bars="waveBars"
         @invite="copyInvite(activeRoom)"
+        @help="openOnboarding"
         @kick="handleKickPeer"
         @toggle-mic="handleToggleMic"
         @update-room="updateRoomSettings"
@@ -585,8 +586,6 @@ useHead({
       @close="rewardsOpen = false"
       @update-user="handleRewardsUserUpdate"
     />
-
-    <EzcordFloatingHelpButton v-if="user" @click="openOnboarding" />
 
     <EzcordOnboardingModal
       :completing="onboardingCompleting"
