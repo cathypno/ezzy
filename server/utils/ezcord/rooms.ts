@@ -8,6 +8,12 @@ import { requireEzcordUser } from "./auth";
 import { getTelegramBotUsername, isTelegramChatMember } from "./telegram-bot";
 import type { EzcordRoom, EzcordRoomAccess, EzcordRoomGame, EzcordRoomGoal, EzcordUser } from "./types";
 
+export const EZCORD_EMPTY_ROOM_TTL_MS = 15 * 60 * 1000;
+const INACTIVE_ROOM_CLEANUP_INTERVAL_MS = 60 * 1000;
+
+let inactiveRoomCleanupLastRunAt = 0;
+let inactiveRoomCleanupPromise: Promise<void> | null = null;
+
 export async function canAccessRoom(user: EzcordUser, room: EzcordRoom, inviteCode?: string): Promise<boolean> {
   if (room.closedAt) return false;
   if (room.createdBy === user.id) return true;
@@ -32,6 +38,7 @@ export async function createEzcordRoom(params: {
   createdBy: string;
   telegramChatId?: string;
 }): Promise<EzcordRoom> {
+  const now = new Date().toISOString();
   const room: EzcordRoom = {
     id: randomId("room"),
     name: params.name.trim() || "Новая комната",
@@ -41,16 +48,28 @@ export async function createEzcordRoom(params: {
     createdBy: params.createdBy,
     telegramChatId: params.telegramChatId?.trim() || undefined,
     inviteCode: params.access === "public" ? undefined : randomId("invite"),
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    lastActiveAt: now,
   };
 
   if (usePostgresStore()) {
     const pool = await getPgPool();
     await pool.query(
       `insert into ezcord_rooms
-        (id, name, access, game, goal, invite_code, telegram_chat_id, created_by, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [room.id, room.name, room.access, room.game, room.goal, room.inviteCode, room.telegramChatId, room.createdBy, room.createdAt],
+        (id, name, access, game, goal, invite_code, telegram_chat_id, created_by, created_at, last_active_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        room.id,
+        room.name,
+        room.access,
+        room.game,
+        room.goal,
+        room.inviteCode,
+        room.telegramChatId,
+        room.createdBy,
+        room.createdAt,
+        room.lastActiveAt,
+      ],
     );
     return room;
   }
@@ -62,6 +81,8 @@ export async function createEzcordRoom(params: {
 }
 
 export async function getOrCreateEzcordHomeRoom(user: EzcordUser): Promise<EzcordRoom> {
+  await closeInactiveEzcordRooms();
+
   if (usePostgresStore()) {
     const pool = await getPgPool();
     const existing = await pool.query(
@@ -98,6 +119,8 @@ export async function getOrCreateEzcordHomeRoom(user: EzcordUser): Promise<Ezcor
 }
 
 export async function listEzcordRooms(user?: EzcordUser | null): Promise<EzcordRoom[]> {
+  await closeInactiveEzcordRooms();
+
   if (usePostgresStore()) {
     const pool = await getPgPool();
     const result = await pool.query(
@@ -116,6 +139,8 @@ export async function listEzcordRooms(user?: EzcordUser | null): Promise<EzcordR
 }
 
 export async function getEzcordRoom(roomId: string): Promise<EzcordRoom | null> {
+  await closeInactiveEzcordRooms();
+
   if (usePostgresStore()) {
     const pool = await getPgPool();
     const result = await pool.query("select * from ezcord_rooms where id = $1", [roomId]);
@@ -124,6 +149,68 @@ export async function getEzcordRoom(roomId: string): Promise<EzcordRoom | null> 
 
   const data = readEzcordData();
   return data.rooms.find((room) => room.id === roomId) || null;
+}
+
+export async function touchEzcordRoomActivity(roomId: string, at = new Date().toISOString()): Promise<void> {
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    await pool.query("update ezcord_rooms set last_active_at = $2 where id = $1 and closed_at is null", [roomId, at]);
+    return;
+  }
+
+  const data = readEzcordData();
+  const room = data.rooms.find((item) => item.id === roomId && !item.closedAt);
+  if (!room) return;
+  room.lastActiveAt = at;
+  writeEzcordData(data);
+}
+
+export async function closeInactiveEzcordRooms(options: { force?: boolean } = {}): Promise<void> {
+  const now = Date.now();
+  if (inactiveRoomCleanupPromise) {
+    await inactiveRoomCleanupPromise;
+    return;
+  }
+  if (!options.force && now - inactiveRoomCleanupLastRunAt < INACTIVE_ROOM_CLEANUP_INTERVAL_MS) return;
+
+  inactiveRoomCleanupLastRunAt = now;
+  inactiveRoomCleanupPromise = closeInactiveEzcordRoomsNow(now).finally(() => {
+    inactiveRoomCleanupPromise = null;
+  });
+  await inactiveRoomCleanupPromise;
+}
+
+async function closeInactiveEzcordRoomsNow(now: number): Promise<void> {
+  const closedAt = new Date(now).toISOString();
+  const inactiveBefore = new Date(now - getEmptyRoomTtlMs()).toISOString();
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    await pool.query(
+      `update ezcord_rooms
+          set closed_at = $1
+        where closed_at is null
+          and last_active_at < $2`,
+      [closedAt, inactiveBefore],
+    );
+    return;
+  }
+
+  const data = readEzcordData();
+  let changed = false;
+  for (const room of data.rooms) {
+    const lastActiveAt = room.lastActiveAt || room.createdAt;
+    if (!room.closedAt && new Date(lastActiveAt).getTime() < new Date(inactiveBefore).getTime()) {
+      room.closedAt = closedAt;
+      changed = true;
+    }
+  }
+  if (changed) writeEzcordData(data);
+}
+
+function getEmptyRoomTtlMs(): number {
+  const configured = Number(getEzcordEnv("EZCORD_EMPTY_ROOM_TTL_MS") || "");
+  return Number.isFinite(configured) && configured > 0 ? configured : EZCORD_EMPTY_ROOM_TTL_MS;
 }
 
 export async function updateEzcordRoomSettings(

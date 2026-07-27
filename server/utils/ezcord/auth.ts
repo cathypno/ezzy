@@ -25,6 +25,7 @@ export function publicEzcordUser(user: EzcordUser): EzcordPublicUser {
     level,
     lobbyUnlocked: isEzcordLobbyUnlocked(normalized),
     chestOpenCount: normalized.chestOpenCount,
+    onboardingCompletedAt: normalized.onboardingCompletedAt,
     telegram: user.telegram,
   };
 }
@@ -351,6 +352,35 @@ export async function linkTelegramToEzcordUser(userId: string, initData: string)
   user.telegram = identity;
   writeEzcordData(data);
   return identity;
+}
+
+export async function completeEzcordOnboarding(userId: string): Promise<EzcordUser> {
+  const completedAt = new Date().toISOString();
+
+  if (usePostgresStore()) {
+    const pool = await getPgPool();
+    const result = await pool.query(
+      `update ezcord_users
+          set onboarding_completed_at = coalesce(onboarding_completed_at, $1)
+        where id = $2
+        returning *`,
+      [completedAt, userId],
+    );
+    if (result.rowCount === 0) {
+      throw createError({ statusCode: 404, message: "Пользователь не найден" });
+    }
+    return rowToUser(result.rows[0]);
+  }
+
+  const data = readEzcordData();
+  const user = data.users.find((item) => item.id === userId);
+  if (!user) {
+    throw createError({ statusCode: 404, message: "Пользователь не найден" });
+  }
+
+  user.onboardingCompletedAt ||= completedAt;
+  writeEzcordData(data);
+  return user;
 }
 
 async function findEzcordUserByEmail(email: string): Promise<EzcordUser | null> {

@@ -16,6 +16,22 @@ export default defineNuxtConfig({
       websocket: true,
     },
   },
+  routeRules: {
+    "/ezcord": {
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+        pragma: "no-cache",
+        expires: "0",
+      },
+    },
+    "/ezcord/": {
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+        pragma: "no-cache",
+        expires: "0",
+      },
+    },
+  },
   vite: {
     plugins: [tailwindcss()],
   },

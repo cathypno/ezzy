@@ -12,6 +12,7 @@ export interface User {
   level: number;
   lobbyUnlocked: boolean;
   chestOpenCount: number;
+  onboardingCompletedAt?: string;
   telegram?: {
     id: number;
     username?: string;
@@ -50,6 +51,7 @@ export interface Room {
   inviteUrl?: string;
   telegramChatId?: string;
   createdBy: string;
+  lastActiveAt?: string;
 }
 
 export interface Peer {

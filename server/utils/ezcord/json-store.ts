@@ -39,6 +39,7 @@ export function readEzcordData(): EzcordData {
         xp,
         chestOpenCount: user.chestOpenCount || 0,
         lobbyUnlockedAt: user.lobbyUnlockedAt,
+        onboardingCompletedAt: user.onboardingCompletedAt,
       };
     }),
     sessions: data.sessions || [],
@@ -46,6 +47,7 @@ export function readEzcordData(): EzcordData {
       ...room,
       game: room.game || "voicechat",
       goal: room.goal || "communication",
+      lastActiveAt: room.lastActiveAt || room.createdAt,
     })),
     peers: data.peers || [],
     waitingPeers: data.waitingPeers || [],

@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import EzcordAuthScreen from "~/components/ezcord/EzcordAuthScreen.vue";
-import EzcordBootScreen from "~/components/ezcord/EzcordBootScreen.vue";
-import EzcordHeader from "~/components/ezcord/EzcordHeader.vue";
-import EzcordLobbyModal from "~/components/ezcord/EzcordLobbyModal.vue";
-import EzcordRewardsModal from "~/components/ezcord/EzcordRewardsModal.vue";
-import EzcordRoomPendingScreen from "~/components/ezcord/EzcordRoomPendingScreen.vue";
-import EzcordRoomScreen from "~/components/ezcord/EzcordRoomScreen.vue";
+import { useEzcordOnboarding } from "~/composables/useEzcordOnboarding";
 import { useEzcordVoice } from "~/composables/useEzcordVoice";
 import type { Room, RoomGame, RoomGoal, User } from "~/types/ezcord";
 import { getEzcordUserLevel, getInitials } from "~/utils/ezcord";
@@ -75,6 +69,14 @@ const {
   statusMessage,
 });
 
+const {
+  completeOnboarding,
+  maybeOpenInitialOnboarding,
+  onboardingCompleting,
+  onboardingOpen,
+  openOnboarding,
+} = useEzcordOnboarding(user);
+
 const participantCount = computed(() => peers.value.length + (isWaiting.value ? 0 : user.value ? 1 : 0));
 const canUseLobby = computed(() => Boolean(user.value && (user.value.lobbyUnlocked || getEzcordUserLevel(user.value) >= 2)));
 const visibleMicOn = computed(() => isMicOn.value);
@@ -106,6 +108,7 @@ async function submitAuth() {
     user.value = response.user;
     statusMessage.value = authMode.value === "register" ? "Аккаунт создан" : "Вы вошли";
     await enterStartRoom();
+    if (activeRoom.value) maybeOpenInitialOnboarding();
     startRewardsTimer();
   } catch (error: any) {
     errorMessage.value = error?.data?.message || "Не получилось войти";
@@ -183,6 +186,7 @@ async function pollTelegramLogin(requestId: string) {
       user.value = response.user;
       statusMessage.value = "Вы вошли через Telegram";
       await enterStartRoom();
+      if (activeRoom.value) maybeOpenInitialOnboarding();
       startRewardsTimer();
       return;
     }
@@ -476,6 +480,7 @@ onMounted(async () => {
     if (user.value) {
       await enterStartRoom();
       startRewardsTimer();
+      if (activeRoom.value) maybeOpenInitialOnboarding();
     }
   } finally {
     isBooting.value = false;
@@ -499,7 +504,7 @@ useHead({
 
 <template>
   <main class="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,rgba(82,207,28,0.14),transparent_250px),linear-gradient(180deg,#0b0e0b,#060806)] text-ez-ink">
-    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" @open-rewards="rewardsOpen = true" />
+    <EzcordHeader :can-use-lobby="canUseLobby" :user="user" @open-lobby="openLobby" @open-onboarding="openOnboarding" @open-rewards="rewardsOpen = true" />
 
     <div class="min-h-[calc(100vh-74px)]">
       <EzcordBootScreen v-if="isBooting" />
@@ -579,6 +584,13 @@ useHead({
       :user="user"
       @close="rewardsOpen = false"
       @update-user="handleRewardsUserUpdate"
+    />
+
+    <EzcordOnboardingModal
+      :completing="onboardingCompleting"
+      :open="onboardingOpen"
+      @close="completeOnboarding"
+      @complete="completeOnboarding"
     />
   </main>
 </template>

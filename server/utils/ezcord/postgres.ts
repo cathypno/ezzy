@@ -43,6 +43,7 @@ async function ensurePgSchema(pool: any): Promise<void> {
         xp integer not null default 0,
         chest_open_count integer not null default 0,
         lobby_unlocked_at timestamptz,
+        onboarding_completed_at timestamptz,
         created_at timestamptz not null,
         activity_reward_last_seen_at timestamptz,
         activity_reward_last_awarded_at timestamptz,
@@ -102,6 +103,7 @@ async function ensurePgSchema(pool: any): Promise<void> {
         telegram_chat_id text,
         created_by text not null references ezcord_users(id) on delete cascade,
         created_at timestamptz not null,
+        last_active_at timestamptz not null default now(),
         closed_at timestamptz
       );
 
@@ -110,10 +112,15 @@ async function ensurePgSchema(pool: any): Promise<void> {
       alter table ezcord_users add column if not exists xp integer not null default 0;
       alter table ezcord_users add column if not exists chest_open_count integer not null default 0;
       alter table ezcord_users add column if not exists lobby_unlocked_at timestamptz;
+      alter table ezcord_users add column if not exists onboarding_completed_at timestamptz;
       alter table ezcord_users add column if not exists activity_reward_last_seen_at timestamptz;
       alter table ezcord_users add column if not exists activity_reward_last_awarded_at timestamptz;
       alter table ezcord_rooms add column if not exists game text not null default 'voicechat';
       alter table ezcord_rooms add column if not exists goal text not null default 'communication';
+      alter table ezcord_rooms add column if not exists last_active_at timestamptz;
+      update ezcord_rooms set last_active_at = created_at where last_active_at is null;
+      alter table ezcord_rooms alter column last_active_at set not null;
+      alter table ezcord_rooms alter column last_active_at set default now();
 
       create table if not exists ezcord_kicked_peers (
         room_id text not null references ezcord_rooms(id) on delete cascade,
@@ -125,6 +132,7 @@ async function ensurePgSchema(pool: any): Promise<void> {
 
       create index if not exists ezcord_rooms_created_by_idx on ezcord_rooms(created_by);
       create index if not exists ezcord_rooms_access_idx on ezcord_rooms(access);
+      create index if not exists ezcord_rooms_last_active_idx on ezcord_rooms(last_active_at);
       create index if not exists ezcord_sessions_user_id_idx on ezcord_sessions(user_id);
       create index if not exists ezcord_telegram_login_requests_expires_idx on ezcord_telegram_login_requests(expires_at);
       create index if not exists ezcord_point_events_user_id_idx on ezcord_point_events(user_id);
@@ -169,8 +177,8 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
     for (const user of data.users) {
       await pool.query(
         `insert into ezcord_users
-          (id, email, password_hash, display_name, points, coins, xp, chest_open_count, lobby_unlocked_at, created_at, activity_reward_last_seen_at, activity_reward_last_awarded_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          (id, email, password_hash, display_name, points, coins, xp, chest_open_count, lobby_unlocked_at, onboarding_completed_at, created_at, activity_reward_last_seen_at, activity_reward_last_awarded_at, telegram_id, telegram_username, telegram_first_name, telegram_last_name, telegram_photo_url, telegram_linked_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
          on conflict (id) do nothing`,
         [
           user.id,
@@ -182,6 +190,7 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
           user.xp ?? user.points ?? 0,
           user.chestOpenCount || 0,
           user.lobbyUnlockedAt,
+          user.onboardingCompletedAt,
           user.createdAt,
           user.activityRewardLastSeenAt,
           user.activityRewardLastAwardedAt,
@@ -206,10 +215,22 @@ async function migrateJsonToPostgres(pool: any): Promise<void> {
 
     for (const room of data.rooms) {
       await pool.query(
-        `insert into ezcord_rooms (id, name, access, game, goal, invite_code, telegram_chat_id, created_by, created_at, closed_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `insert into ezcord_rooms (id, name, access, game, goal, invite_code, telegram_chat_id, created_by, created_at, last_active_at, closed_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          on conflict (id) do nothing`,
-        [room.id, room.name, room.access, room.game, room.goal, room.inviteCode, room.telegramChatId, room.createdBy, room.createdAt, room.closedAt],
+        [
+          room.id,
+          room.name,
+          room.access,
+          room.game,
+          room.goal,
+          room.inviteCode,
+          room.telegramChatId,
+          room.createdBy,
+          room.createdAt,
+          room.lastActiveAt || room.createdAt,
+          room.closedAt,
+        ],
       ).catch(() => {});
     }
 
@@ -270,6 +291,7 @@ export function rowToUser(row: any): EzcordUser {
     xp: Number(row.xp ?? row.points ?? 0),
     chestOpenCount: Number(row.chest_open_count || 0),
     lobbyUnlockedAt: row.lobby_unlocked_at ? toIso(row.lobby_unlocked_at) : undefined,
+    onboardingCompletedAt: row.onboarding_completed_at ? toIso(row.onboarding_completed_at) : undefined,
     createdAt: toIso(row.created_at),
     activityRewardLastSeenAt: row.activity_reward_last_seen_at ? toIso(row.activity_reward_last_seen_at) : undefined,
     activityRewardLastAwardedAt: row.activity_reward_last_awarded_at ? toIso(row.activity_reward_last_awarded_at) : undefined,
@@ -301,6 +323,7 @@ export function rowToRoom(row: any): EzcordRoom {
     telegramChatId: row.telegram_chat_id || undefined,
     createdBy: row.created_by,
     createdAt: toIso(row.created_at),
+    lastActiveAt: row.last_active_at ? toIso(row.last_active_at) : toIso(row.created_at),
     closedAt: row.closed_at ? toIso(row.closed_at) : undefined,
   };
 }

@@ -13,6 +13,7 @@ export interface EzcordUser {
   xp: number;
   chestOpenCount: number;
   lobbyUnlockedAt?: string;
+  onboardingCompletedAt?: string;
   createdAt: string;
   activityRewardLastSeenAt?: string;
   activityRewardLastAwardedAt?: string;
@@ -38,6 +39,7 @@ export interface EzcordRoom {
   telegramChatId?: string;
   createdBy: string;
   createdAt: string;
+  lastActiveAt: string;
   closedAt?: string;
 }
 
@@ -141,6 +143,7 @@ export interface EzcordPublicUser {
   level: number;
   lobbyUnlocked: boolean;
   chestOpenCount: number;
+  onboardingCompletedAt?: string;
   telegram?: EzcordTelegramIdentity;
 }
 
